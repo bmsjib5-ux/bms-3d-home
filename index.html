@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>แผนที่ 3D เส้นทางการรับบริการผู้ป่วยนอก</title>
+<style>
+:root{
+  --panel:rgba(255,255,255,.88);
+  --ink:#16324a;
+  --muted:#58718a;
+  --accent:#139fc4;
+  --line:rgba(22,50,74,.14);
+  --font:"Noto Sans Thai","Leelawadee UI","Leelawadee","Tahoma","Sarabun",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#cfe6f5;font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
+#scene{position:fixed;inset:0}
+#scene canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#scene canvas:active{cursor:grabbing}
+.panel{position:fixed;background:var(--panel);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.75);box-shadow:0 10px 32px rgba(20,50,80,.18);border-radius:16px;z-index:2}
+#top{left:16px;top:16px;padding:14px 16px;max-width:min(460px,calc(100vw - 334px))}
+h1{font-size:18px;margin:0 0 4px;line-height:1.35}
+.hint{font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.45}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select{font:inherit;font-size:13.5px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 12px;cursor:pointer;min-height:36px}
+button:hover,select:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,.step:focus-visible{outline:3px solid #ffb938;outline-offset:2px}
+button.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:700;min-width:118px}
+button.primary:hover{background:#0f8bad}
+button.toggle[aria-pressed="true"]{background:#e2f5fb;border-color:var(--accent);color:#0c6f8b;font-weight:600}
+label.speed{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+#steps{right:16px;top:16px;width:288px;padding:12px;max-height:calc(100vh - 32px);overflow:auto}
+#steps h2{font-size:14.5px;margin:2px 6px 8px}
+#stepList{display:flex;flex-direction:column;gap:3px}
+.step{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:12px;cursor:pointer;border:1px solid transparent;transition:background .2s,border-color .2s;user-select:none}
+.step:hover{background:rgba(255,255,255,.7)}
+.step .num{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px;flex:none;box-shadow:0 2px 6px rgba(0,0,0,.15);position:relative}
+.step .txt{flex:1;font-size:13.5px;line-height:1.3;font-weight:600}
+.step .txt small{display:block;color:var(--muted);font-size:11.5px;font-weight:400}
+.step.active{background:#fff;border-color:var(--accent);box-shadow:0 3px 12px rgba(19,159,196,.2)}
+.step.done .num::after{content:"✓";position:absolute;right:-4px;bottom:-4px;width:15px;height:15px;border-radius:50%;background:#fff;color:#2f9e55;font-size:10px;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.step.off .num,.step.off .txt{opacity:.42}
+.step.off .txt{text-decoration:line-through}
+.sw{position:relative;width:40px;height:22px;flex:none;display:inline-block}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.sw span{position:absolute;inset:0;border-radius:11px;background:#c3ced8;transition:.2s;pointer-events:none}
+.sw span::after{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span::after{transform:translateX(18px)}
+.sw input:focus-visible+span{outline:3px solid #ffb938;outline-offset:2px}
+.legend{font-size:11.5px;color:var(--muted);margin:8px 6px 2px;line-height:1.45}
+#info{left:16px;bottom:16px;width:min(580px,calc(100vw - 336px));padding:12px 16px 12px}
+.info-head{display:flex;align-items:center;gap:12px}
+.badge{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;flex:none;box-shadow:0 3px 8px rgba(0,0,0,.18);transition:background .3s}
+.state{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.2px}
+.ititle{font-size:16.5px;font-weight:700;line-height:1.3}
+#infoDesc{margin:8px 0 10px;font-size:13.5px;line-height:1.6;min-height:3.2em}
+.info-foot{display:flex;align-items:center;gap:10px}
+.info-foot button{min-width:40px;padding:6px 10px}
+.bar{flex:1;height:8px;border-radius:4px;background:rgba(22,50,74,.12);overflow:hidden}
+#barFill{height:100%;width:100%;background:linear-gradient(90deg,#2ee0ff,#139fc4);transform-origin:left center;transform:scaleX(0)}
+#timeText{font-size:12px;color:var(--muted);min-width:86px;text-align:right;font-variant-numeric:tabular-nums}
+#playPrompt{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:18px 28px;font-size:20px;font-weight:800;box-shadow:0 12px 40px rgba(10,60,90,.35);display:flex;flex-direction:column;gap:4px;align-items:center}
+#playPrompt small{font-size:13px;font-weight:400;opacity:.92}
+#playPrompt[hidden]{display:none}
+#toast{position:fixed;left:50%;top:18px;transform:translate(-50%,-30px);opacity:0;z-index:6;background:#16324a;color:#fff;padding:9px 16px;border-radius:12px;font-size:13.5px;transition:.25s;pointer-events:none;max-width:calc(100vw - 32px);text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#fallback{position:fixed;inset:0;z-index:10;display:grid;place-items:center;background:linear-gradient(#cfe6f5,#eef6fb);padding:20px}
+#fallback[hidden]{display:none}
+#fallback .card{max-width:460px;background:#fff;border-radius:18px;padding:24px 26px;box-shadow:0 10px 30px rgba(20,50,80,.15);text-align:center}
+#fallback h2{margin:0 0 8px;font-size:20px}
+#fallback p{margin:0;color:var(--muted);line-height:1.6}
+@media (max-width:860px){
+  #top{left:10px;right:10px;top:10px;max-width:none;padding:10px 12px}
+  h1{font-size:15px}
+  .hint{font-size:11.5px;margin-bottom:8px}
+  button,select{font-size:12.5px;min-height:34px;padding:5px 10px}
+  button.primary{min-width:100px}
+  #steps{left:10px;right:10px;top:auto;bottom:10px;width:auto;max-height:none;padding:8px;overflow-x:auto;overflow-y:hidden}
+  #steps h2,.legend{display:none}
+  #stepList{flex-direction:row;gap:4px}
+  .step{flex:none;flex-direction:column;gap:4px;padding:6px 6px;min-width:78px;max-width:96px}
+  .step .txt{font-size:11px;text-align:center}
+  .step .txt small{display:none}
+  .sw{transform:scale(.85)}
+  #info{left:10px;right:10px;width:auto;bottom:122px;padding:10px 12px}
+  #infoDesc{font-size:12.5px;min-height:0;margin:6px 0 8px}
+  .badge{width:34px;height:34px;font-size:15px}
+  .ititle{font-size:14.5px}
+}
+@media (max-width:860px) and (max-height:700px){
+  #infoDesc{display:none}
+}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important}
+}
+</style>
+</head>
+<body>
+<div id="scene" aria-label="แผนที่ 3 มิติของโรงพยาบาล แสดงเส้นทางการรับบริการผู้ป่วยนอก"></div>
+
+<header id="top" class="panel">
+  <h1>แผนที่ 3D เส้นทางการรับบริการผู้ป่วยนอก</h1>
+  <p class="hint">ลากเพื่อหมุน · ล้อเมาส์หรือบีบนิ้วเพื่อซูม · ดับเบิลคลิกเพื่อรีเซ็ต · คลิกจุดบริการเพื่อดูทีละขั้น · Space เล่น/หยุด</p>
+  <div class="row">
+    <button id="playBtn" class="primary" aria-pressed="true">⏸ หยุดชั่วคราว</button>
+    <label class="speed">ความเร็ว
+      <select id="speedSel" aria-label="ความเร็วแอนิเมชัน">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <button id="followBtn" class="toggle" aria-pressed="true">ติดตามคนไข้</button>
+    <button id="resetBtn">รีเซ็ตมุมมอง</button>
+    <button id="liveBtn" class="primary" onclick="location.href='live.html'" title="แสดงคนไข้จริงจาก HOSxP">● คนไข้จริง (Realtime)</button>
+  </div>
+</header>
+
+<aside id="steps" class="panel" aria-label="ขั้นตอนการรับบริการ">
+  <h2>ขั้นตอนการรับบริการ</h2>
+  <div id="stepList"></div>
+  <p class="legend">สวิตช์ข้างขั้นตอนที่ 4 และ 7 ใช้เปิด/ปิดขั้นตอนที่มีเงื่อนไข เส้นทางจะปรับใหม่ทันที</p>
+</aside>
+
+<section id="info" class="panel" aria-live="polite">
+  <div class="info-head">
+    <span id="infoBadge" class="badge">1</span>
+    <div>
+      <div id="infoState" class="state">กำลังเดินไป</div>
+      <div id="infoTitle" class="ititle">ขั้นตอนที่ 1 · จุดคัดกรอง</div>
+    </div>
+  </div>
+  <p id="infoDesc"></p>
+  <div class="info-foot">
+    <button id="prevBtn" aria-label="ขั้นตอนก่อนหน้า" title="ขั้นตอนก่อนหน้า">◀</button>
+    <div class="bar" aria-hidden="true"><div id="barFill"></div></div>
+    <span id="timeText">0 / 0 วินาที</span>
+    <button id="nextBtn" aria-label="ขั้นตอนถัดไป" title="ขั้นตอนถัดไป">▶</button>
+  </div>
+</section>
+
+<button id="playPrompt" hidden>▶ กดเพื่อเล่นแอนิเมชัน<small>อุปกรณ์ตั้งค่าลดการเคลื่อนไหวไว้ จึงหยุดภาพไว้ก่อน</small></button>
+<div id="toast" role="status"></div>
+
+<div id="fallback" hidden>
+  <div class="card">
+    <h2>ไม่สามารถแสดงแผนที่ 3 มิติได้</h2>
+    <p id="fallbackMsg">เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับ WebGL กรุณาลองเปิดด้วยเบราว์เซอร์รุ่นใหม่ เช่น Chrome, Edge, Firefox หรือ Safari และเปิดการเร่งความเร็วฮาร์ดแวร์</p>
+  </div>
+</div>
+
+<script>
+setTimeout(function(){
+  if(!window.__sceneStarted){
+    var f=document.getElementById('fallback');
+    document.getElementById('fallbackMsg').textContent='โหลดไลบรารี 3 มิติไม่สำเร็จ กรุณาเปิดไฟล์ผ่านเว็บเซิร์ฟเวอร์ในเครื่อง และตรวจสอบว่ามีไฟล์ lib/three.module.js อยู่ในโฟลเดอร์โปรเจกต์';
+    f.hidden=false;
+  }
+},6000);
+</script>
+
+<script type="module">
+import * as THREE from "./lib/three.module.js";
+window.__sceneStarted = true;
+
+const $ = id => document.getElementById(id);
+
+function hasWebGL(){
+  try{
+    const c=document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+  }catch(e){ return false; }
+}
+function showFallback(msg){
+  if(msg) $('fallbackMsg').textContent = msg;
+  $('fallback').hidden = false;
+  ['top','steps','info'].forEach(id=>{ const e=$(id); if(e) e.style.display='none'; });
+}
+
+if(!hasWebGL()){
+  showFallback();
+}else{
+  try{ main(); }
+  catch(err){ console.error(err); showFallback('เกิดข้อผิดพลาดในการสร้างฉาก 3 มิติ อุปกรณ์นี้อาจไม่รองรับ WebGL อย่างเต็มที่'); }
+}
+
+function main(){
+/* ---------------- helpers ---------------- */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeInOutSine=t=>-(Math.cos(Math.PI*t)-1)/2;
+const easeOutCubic=t=>1-Math.pow(1-t,3);
+const easeInCubic=t=>t*t*t;
+const smooth=t=>t*t*(3-2*t);
+function lerpAngle(a,b,t){ let d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI; return a+d*t; }
+const FONT='"Noto Sans Thai","Leelawadee UI","Leelawadee","Tahoma","Sarabun",sans-serif';
+
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- renderer / scene ---------------- */
+const container=$('scene');
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.02;
+container.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#cfe6f5');
+scene.fog=new THREE.Fog('#d7eaf5',85,210);
+
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,0.5,420);
+
+/* ---------------- textures ---------------- */
+const loader=new THREE.TextureLoader();
+const maxAniso=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+function loadTex(url,repeat,cb){
+  const t=loader.load(url,tex=>{ cb&&cb(tex); },undefined,()=>console.warn('โหลดภาพไม่สำเร็จ:',url));
+  t.colorSpace=THREE.SRGBColorSpace;
+  if(repeat){ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=maxAniso; }
+  return t;
+}
+const tileTex=loadTex('assets/hospital-floor-tile.png',true);
+const grassTex=loadTex('assets/garden-grass.png',true);
+const skyTex=loadTex('assets/soft-sky-backdrop.png',false,()=>{ scene.background=skyTex; fitBackground(); });
+function fitBackground(){
+  const img=skyTex.image; if(!img||!img.width) return;
+  const ia=img.width/img.height, ca=innerWidth/innerHeight;
+  if(ca>ia){ skyTex.repeat.set(1,ia/ca); skyTex.offset.set(0,(1-ia/ca)/2); }
+  else{ skyTex.repeat.set(ca/ia,1); skyTex.offset.set((1-ca/ia)/2,0); }
+  skyTex.needsUpdate=true;
+}
+
+/* ---------------- shared geometry / materials ---------------- */
+const BOX=new THREE.BoxGeometry(1,1,1);
+const CYL=new THREE.CylinderGeometry(0.5,0.5,1,20);
+const SPH=new THREE.SphereGeometry(0.5,18,12);
+const matCache=new Map();
+function mat(color,o={}){
+  const k=color+JSON.stringify(o);
+  if(!matCache.has(k)) matCache.set(k,new THREE.MeshStandardMaterial(Object.assign({color,roughness:.75,metalness:0},o)));
+  return matCache.get(k);
+}
+function box(p,w,h,d,m,x,y,z,ry=0,cast=true){
+  const o=new THREE.Mesh(BOX,m); o.scale.set(w,h,d); o.position.set(x,y+h/2,z); o.rotation.y=ry;
+  o.castShadow=cast; o.receiveShadow=true; p.add(o); return o;
+}
+function cyl(p,r,h,m,x,y,z,cast=true){
+  const o=new THREE.Mesh(CYL,m); o.scale.set(r*2,h,r*2); o.position.set(x,y+h/2,z);
+  o.castShadow=cast; o.receiveShadow=true; p.add(o); return o;
+}
+function sph(p,r,m,x,y,z){
+  const o=new THREE.Mesh(SPH,m); o.scale.setScalar(r*2); o.position.set(x,y,z); o.castShadow=true; p.add(o); return o;
+}
+function tiledPlane(w,h,tile){
+  const g=new THREE.PlaneGeometry(w,h); const uv=g.attributes.uv;
+  for(let i=0;i<uv.count;i++) uv.setXY(i,uv.getX(i)*w/tile,uv.getY(i)*h/tile);
+  g.rotateX(-Math.PI/2); return g;
+}
+function textCanvas(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
+}
+function roundRect(g,x,y,w,h,r){
+  g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+function fitFont(g,text,max,size,weight,min){
+  let fs=size; g.font=`${weight} ${fs}px ${FONT}`;
+  while(g.measureText(text).width>max && fs>min){ fs-=2; g.font=`${weight} ${fs}px ${FONT}`; }
+  return fs;
+}
+/* thin box sign: readable from front and back */
+function signBox(parent,text,bg,fg,w,h,x,y,z,ry=0){
+  const tex=textCanvas(512,Math.round(512*h/w),(g,W,H)=>{
+    g.fillStyle=bg; roundRect(g,3,3,W-6,H-6,Math.min(26,H/3)); g.fill();
+    g.fillStyle=fg; fitFont(g,text,W-44,Math.min(72,H*0.56),700,18);
+    g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,W/2,H/2+3);
+  });
+  const m=new THREE.Mesh(BOX,new THREE.MeshBasicMaterial({map:tex,toneMapped:false}));
+  m.scale.set(w,h,0.06); m.position.set(x,y,z); m.rotation.y=ry; parent.add(m); return m;
+}
+
+/* ---------------- lights ---------------- */
+scene.add(new THREE.HemisphereLight('#eaf5ff','#9fb38a',1.15));
+const sun=new THREE.DirectionalLight('#fff0da',2.35);
+sun.position.set(26,52,34); sun.target.position.set(0,0,3);
+sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+const sc=sun.shadow.camera; sc.left=-46; sc.right=46; sc.top=46; sc.bottom=-46; sc.near=5; sc.far=150;
+sun.shadow.bias=-0.0005; sun.shadow.normalBias=0.03;
+scene.add(sun,sun.target);
+
+const world=new THREE.Group(); scene.add(world);
+
+/* ---------------- ground ---------------- */
+const grass=new THREE.Mesh(tiledPlane(340,340,7),new THREE.MeshStandardMaterial({map:grassTex,roughness:1}));
+grass.position.y=-0.03; grass.receiveShadow=true; world.add(grass);
+
+box(world,48.8,0.32,30.8,mat('#cfcac0'),0,-0.32,-1,0,false);
+const floor=new THREE.Mesh(tiledPlane(48,30,3),new THREE.MeshStandardMaterial({map:tileTex,roughness:.5}));
+floor.position.set(0,0.004,-1); floor.receiveShadow=true; world.add(floor);
+
+function tint(x0,x1,z0,z1,color,tile=3,y=0.012){
+  const m=new THREE.Mesh(tiledPlane(x1-x0,z1-z0,tile),new THREE.MeshStandardMaterial({map:tileTex,color,roughness:.55,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2}));
+  m.position.set((x0+x1)/2,y,(z0+z1)/2); m.receiveShadow=true; world.add(m); return m;
+}
+tint(-24,-7,-16,-4.5,'#e7dcf7');
+tint(-7,7,-16,-4.5,'#d9e9fb');
+tint(7,24,-16,-4.5,'#d8f1e3');
+tint(5.4,12.6,6.6,12.4,'#fae0ec');
+tint(-19.5,-10.5,7,13.8,'#fde6d2');
+/* sidewalks & walkways */
+tint(-80,80,23,26,'#d3cec4',2,0.0);
+tint(-17,-13,14,23,'#dcd6cb',2,0.0);
+tint(17,21,14,23,'#dcd6cb',2,0.0);
+/* road */
+const road=new THREE.Mesh(new THREE.PlaneGeometry(240,6.2),mat('#525861',{roughness:.95}));
+road.rotation.x=-Math.PI/2; road.position.set(0,0.005,29.1); road.receiveShadow=true; world.add(road);
+box(world,240,0.16,0.3,mat('#bdb8ae'),0,-0.02,26.05,0,false);
+{
+  const dashes=new THREE.InstancedMesh(BOX,mat('#f4f4ef',{roughness:.8}),40);
+  const d=new THREE.Object3D();
+  for(let i=0;i<40;i++){ d.position.set(-117+i*6,0.02,29.1); d.scale.set(2.6,0.02,0.18); d.updateMatrix(); dashes.setMatrixAt(i,d.matrix); }
+  dashes.receiveShadow=true; world.add(dashes);
+}
+
+/* ---------------- walls ---------------- */
+const wallM=mat('#f4f0e8',{roughness:.9});
+const trimM=mat('#8fc3d3',{roughness:.6});
+const glassM=new THREE.MeshStandardMaterial({color:'#bfe6f5',transparent:true,opacity:.26,roughness:.08,metalness:.1,depthWrite:false});
+const WT=0.3;
+function wallX(x0,x1,z,h=2.4,glass=0){
+  box(world,x1-x0,h,WT,wallM,(x0+x1)/2,0,z);
+  box(world,x1-x0+0.02,0.1,WT+0.06,trimM,(x0+x1)/2,h,z);
+  if(glass) box(world,x1-x0,glass,0.08,glassM,(x0+x1)/2,h+0.1,z,0,false);
+}
+function wallZ(z0,z1,x,h=2.4){
+  box(world,WT,h,z1-z0,wallM,x,0,(z0+z1)/2);
+  box(world,WT+0.06,0.1,z1-z0+0.02,trimM,x,h,(z0+z1)/2);
+}
+wallX(-24.15,24.15,-16);
+wallZ(-16,14,-24); wallZ(-16,14,24);
+wallX(-24.15,-18,14,1.0,1.3); wallX(-12,16,14,1.0,1.3); wallX(22,24.15,14,1.0,1.3);
+wallZ(-16,-4.5,-7); wallZ(-16,-4.5,7);
+wallX(-24,-15.4,-4.5,1.1,1.2); wallX(-12.6,-7,-4.5,1.1,1.2);
+wallX(-7,-1.4,-4.5,1.1,1.2); wallX(1.4,7,-4.5,1.1,1.2);
+wallX(7,12.6,-4.5,1.1,1.2); wallX(15.4,24,-4.5,1.1,1.2);
+
+/* ---------------- steps data ---------------- */
+const START=[-15,25.2];
+const STEPS=[
+ {id:1,name:'จุดคัดกรอง',sub:'วัดไข้ · วัดความดัน · ซักอาการ',color:'#e8615a',pos:[-14.3,10],face:[1,0],approach:[[-15,14.6],[-15,11.2]],leave:[[-14.4,7.6]],arm:'L',
+  desc:'คนไข้เดินเข้าอาคารมาที่จุดคัดกรอง พยาบาลวัดไข้ วัดความดัน และสอบถามอาการเบื้องต้น เพื่อคัดแยกและส่งต่อไปยังคลินิกที่เหมาะสม'},
+ {id:2,name:'ตู้คีออสลงทะเบียน',sub:'เสียบบัตรประชาชน รับบัตรคิว',color:'#f29b38',pos:[-7,10],face:[0,1],approach:[],leave:[],arm:'R',
+  desc:'ลงทะเบียนด้วยตนเองที่ตู้คีออส เสียบบัตรประชาชนเพื่อยืนยันตัวตนและตรวจสอบสิทธิการรักษา จากนั้นรับบัตรคิวสำหรับคลินิกที่นัด'},
+ {id:3,name:'คลินิกที่นัด',sub:'ยื่นบัตรคิว นั่งรอเรียก',color:'#d4aa1f',pos:[-2,4.3],face:[0,1],approach:[[-4.8,3.2]],leave:[],arm:'R',
+  desc:'เดินไปยังคลินิกตามใบนัด ยื่นบัตรคิวและใบนัดที่เคาน์เตอร์พยาบาล ชั่งน้ำหนัก วัดสัญญาณชีพ แล้วนั่งรอเรียกในพื้นที่พักคอย'},
+ {id:4,name:'ห้องแล็บเจาะเลือด',sub:'ถ้ามีการสั่งเจาะเลือด',color:'#a66ee0',pos:[-14,-9.2],face:[0,-1],approach:[[-14,-1.6],[-14,-4.6]],leave:[[-14,-4.6],[-14,-1.6]],optional:true,sit:true,arm:'L',
+  desc:'กรณีแพทย์สั่งตรวจเลือด เดินไปห้องปฏิบัติการ (ห้องแล็บ) เจ้าหน้าที่เจาะเลือดส่งตรวจ แล้วรอผลก่อนพบแพทย์ — ขั้นตอนนี้มีเงื่อนไข เปิด/ปิดได้'},
+ {id:5,name:'ห้องตรวจแพทย์',sub:'พยาบาลเรียกเข้าพบแพทย์',color:'#3d8fe0',pos:[0,-9.1],face:[0,-1],approach:[[0,-1.6],[0,-4.6]],leave:[[0,-4.6],[0,-1.6]],sit:true,arm:null,
+  desc:'เมื่อถึงคิว พยาบาลเรียกชื่อเข้าห้องตรวจ แพทย์ซักประวัติ ตรวจร่างกาย อ่านผลแล็บ วางแผนการรักษา สั่งยา หรือออกใบนัดครั้งต่อไป'},
+ {id:6,name:'ห้องยา',sub:'รับยาและคำแนะนำการใช้ยา',color:'#2fb38a',pos:[14,-9.2],face:[0,-1],approach:[[14,-1.6],[14,-4.6]],leave:[[14,-4.6],[14,-1.6]],arm:'R',
+  desc:'แพทย์ตรวจเสร็จ เดินไปยื่นใบสั่งยาที่ห้องยา รอเรียกคิว เภสัชกรจ่ายยาพร้อมอธิบายวิธีใช้ยาและข้อควรระวัง'},
+ {id:7,name:'ห้องการเงิน',sub:'ถ้ามีค่าใช้จ่าย',color:'#e0679f',pos:[9,8.2],face:[0,1],approach:[],leave:[[11.5,7.2]],optional:true,arm:'R',
+  desc:'กรณีมีค่าใช้จ่ายส่วนเกินสิทธิการรักษา ชำระเงินที่ห้องการเงินด้วยเงินสด บัตร หรือสแกนคิวอาร์โค้ด แล้วรับใบเสร็จ — ขั้นตอนนี้มีเงื่อนไข เปิด/ปิดได้'},
+ {id:8,name:'กลับบ้าน',sub:'ออกทางออก ไปจุดรับส่ง',color:'#4fb548',pos:[19,24.4],face:[0,1],approach:[[19,12.4],[19,15.6]],leave:[],arm:'wave',
+  desc:'เสร็จสิ้นการรับบริการ เดินออกทางออกไปยังจุดรับส่งผู้ป่วย แล้วขึ้นรถเดินทางกลับบ้านอย่างปลอดภัย'},
+];
+STEPS.forEach(s=>{ s.enabled=true; s.npcAmt=0; });
+const byId={}; STEPS.forEach(s=>byId[s.id]=s);
+
+/* ---------------- people ---------------- */
+const PG={
+  torso:new THREE.CapsuleGeometry(0.3,0.52,4,12),
+  head:new THREE.SphereGeometry(0.24,18,14),
+  hair:new THREE.SphereGeometry(0.255,18,10,0,Math.PI*2,0,Math.PI*0.52),
+  leg:new THREE.CylinderGeometry(0.12,0.1,0.86,10).translate(0,-0.43,0),
+  arm:new THREE.CylinderGeometry(0.085,0.07,0.68,8).translate(0,-0.34,0),
+  hand:new THREE.SphereGeometry(0.08,10,8),
+  shoe:new THREE.BoxGeometry(0.19,0.1,0.32),
+  skirt:new THREE.CylinderGeometry(0.31,0.39,0.52,14,1,true),
+  cap:new THREE.BoxGeometry(0.34,0.1,0.22),
+  steth:new THREE.TorusGeometry(0.15,0.022,6,18),
+};
+function makePerson(o){
+  const root=new THREE.Group(), body=new THREE.Group(); root.add(body);
+  const shirt=mat(o.shirt,{roughness:.85}), pants=mat(o.pants,{roughness:.85});
+  const skin=mat(o.skin||'#efc39c',{roughness:.7}), hairM=mat(o.hair||'#2a211c',{roughness:.9}), shoeM=mat(o.shoe||'#30343b');
+  const add=(g,m,x,y,z,p=body)=>{ const me=new THREE.Mesh(g,m); me.position.set(x,y,z); me.castShadow=true; p.add(me); return me; };
+  add(PG.torso,shirt,0,1.33,0);
+  add(PG.head,skin,0,2.12,0);
+  const h=add(PG.hair,hairM,0,2.15,-0.03); h.rotation.x=-0.28;
+  if(o.coat) add(PG.skirt,mat('#fbfbfb',{roughness:.85,side:THREE.DoubleSide}),0,0.74,0);
+  if(o.cap) add(PG.cap,mat('#ffffff'),0,2.38,0.03);
+  if(o.steth){ const s=add(PG.steth,mat('#2c3440'),0,1.62,0.24); s.rotation.x=0.25; }
+  const mkLeg=x=>{ const g=new THREE.Group(); g.position.set(x,0.9,0); body.add(g); add(PG.leg,pants,0,0,0,g); add(PG.shoe,shoeM,0,-0.86,0.05,g); return g; };
+  const mkArm=x=>{ const g=new THREE.Group(); g.position.set(x,1.7,0); body.add(g); add(PG.arm,shirt,0,0,0,g); add(PG.hand,skin,0,-0.71,0,g); return g; };
+  const p={root,body,legL:mkLeg(0.14),legR:mkLeg(-0.14),armL:mkArm(0.4),armR:mkArm(-0.4)};
+  root.scale.setScalar(0.78);
+  return p;
+}
+function place(p,x,z,yaw){ p.root.position.set(x,0,z); p.root.rotation.y=yaw; world.add(p.root); return p; }
+function sitPose(p){ p.legL.rotation.x=p.legR.rotation.x=-1.45; p.body.position.y=-0.3; p.armL.rotation.x=p.armR.rotation.x=-0.45; }
+
+/* furniture builders */
+const seatM=mat('#3b8fb3',{roughness:.6}), frameM=mat('#8d99a6',{roughness:.5,metalness:.4});
+function chair(x,z,ry=0){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; world.add(g);
+  box(g,0.62,0.08,0.6,seatM,0,0.39,0);
+  box(g,0.62,0.62,0.07,seatM,0,0.47,-0.28);
+  box(g,0.06,0.39,0.5,frameM,0.26,0,0); box(g,0.06,0.39,0.5,frameM,-0.26,0,0);
+  return g;
+}
+const potM=mat('#c98b5b',{roughness:.8}), leafM=mat('#4f9c55',{roughness:.9,flatShading:true});
+const leafG=new THREE.IcosahedronGeometry(0.55,0);
+function plant(x,z){
+  cyl(world,0.32,0.55,potM,x,0,z);
+  const l=new THREE.Mesh(leafG,leafM); l.position.set(x,1.0,z); l.castShadow=true; world.add(l);
+  const l2=new THREE.Mesh(leafG,leafM); l2.position.set(x+0.15,1.45,z-0.1); l2.scale.setScalar(0.7); l2.castShadow=true; world.add(l2);
+}
+const deskM=mat('#f7f7f4',{roughness:.6}), woodM=mat('#c99d72',{roughness:.7}), darkM=mat('#2e3a46',{roughness:.5});
+function door(cx,z,color,label){
+  const fm=mat(color,{roughness:.5});
+  box(world,0.22,2.7,0.42,fm,cx-1.4,0,z); box(world,0.22,2.7,0.42,fm,cx+1.4,0,z);
+  box(world,3.04,0.32,0.42,fm,cx,2.7,z);
+  signBox(world,label,color,'#ffffff',3.6,0.78,cx,3.45,z);
+}
+
+/* ---- Station 1: screening ---- */
+box(world,0.9,0.82,2.2,deskM,-12.9,0,10);
+box(world,0.95,0.05,2.25,mat(STEPS[0].color,{roughness:.5}),-12.9,0.82,10);
+box(world,0.3,0.22,0.3,mat('#dfe6ec'),-12.85,0.87,9.4);
+box(world,0.22,0.16,0.06,mat('#6fd0ff',{emissive:'#3ab0e0',emissiveIntensity:.6}),-12.95,1.0,9.4,Math.PI/2);
+chair(-11.7,10.9,-Math.PI/2);
+STEPS[0].npc=place(makePerson({shirt:'#fbfbfb',pants:'#fbfbfb',cap:true,hair:'#1d1714'}),-11.85,10,-Math.PI/2);
+cyl(world,0.05,2.0,frameM,-12.9,0,11.25);
+signBox(world,'จุดคัดกรอง',STEPS[0].color,'#fff',1.9,0.6,-12.9,2.2,11.25,-Math.PI/2);
+for(const sx of [-16.6,-13.4]) for(const sz of [12.2,13.4]){ cyl(world,0.06,0.95,frameM,sx,0,sz); sph(world,0.08,frameM,sx,0.98,sz); }
+box(world,0.05,0.08,1.2,mat('#d84b4b'),-16.6,0.82,12.8,0,false); box(world,0.05,0.08,1.2,mat('#d84b4b'),-13.4,0.82,12.8,0,false);
+
+/* ---- Station 2: kiosks ---- */
+const kioskBody=mat('#2f6fa8',{roughness:.45,metalness:.2});
+const kioskScreens=[];
+for(const kx of [-9,-7,-5]){
+  box(world,0.95,1.2,0.55,kioskBody,kx,0,11.2);
+  const sm=new THREE.MeshStandardMaterial({color:'#123045',emissive:'#4cc8ff',emissiveIntensity:.45,roughness:.3});
+  const scr=new THREE.Mesh(BOX,sm); scr.scale.set(0.78,0.55,0.06); scr.position.set(kx,1.5,10.98); scr.rotation.x=-0.38; world.add(scr);
+  box(world,0.95,0.6,0.35,kioskBody,kx,1.2,11.3);
+  box(world,0.28,0.05,0.12,darkM,kx+0.2,1.0,10.9,0,false);
+  kioskScreens.push(sm);
+}
+box(world,0.08,2.9,0.08,frameM,-9.8,0,11.6); box(world,0.08,2.9,0.08,frameM,-4.2,0,11.6);
+signBox(world,'ลงทะเบียนด้วยตนเอง',STEPS[1].color,'#fff',5.6,0.62,-7,2.95,11.6);
+STEPS[1].screen=kioskScreens[1];
+
+/* ---- Station 3: clinic ---- */
+box(world,3.4,1.0,0.8,mat('#f5f1e6'),-2,0,5.5);
+box(world,3.5,0.06,0.9,mat(STEPS[2].color,{roughness:.5}),-2,1.0,5.5);
+box(world,0.5,0.32,0.06,darkM,-1.2,1.06,5.7,0,false);
+chair(-2,6.8,Math.PI);
+STEPS[2].npc=place(makePerson({shirt:'#7cc6d8',pants:'#7cc6d8',cap:true,hair:'#2b1d16'}),-2,6.6,Math.PI);
+box(world,0.08,2.8,0.08,frameM,-3.7,0,6.2); box(world,0.08,2.8,0.08,frameM,-0.3,0,6.2);
+signBox(world,'คลินิกอายุรกรรม',STEPS[2].color,'#fff',3.8,0.62,-2,2.85,6.2);
+const queueTex=textCanvas(512,256,(g,W,H)=>{
+  g.fillStyle='#10202d'; g.fillRect(0,0,W,H);
+  g.fillStyle='#7fe3ff'; g.font=`700 44px ${FONT}`; g.textAlign='center'; g.fillText('เรียกคิว',W/2,70);
+  g.fillStyle='#ffe066'; g.font=`800 104px ${FONT}`; g.fillText('A012',W/2,190);
+});
+cyl(world,0.06,1.8,frameM,4.5,0,7.6);
+{ const qb=new THREE.Mesh(BOX,new THREE.MeshBasicMaterial({map:queueTex,toneMapped:false})); qb.scale.set(1.8,0.9,0.08); qb.position.set(4.5,2.15,7.6); world.add(qb); }
+const seatedColors=[['#6a8fd6','#3d4a5c'],['#e98e63','#4d4a45'],['#9ac06a','#3d4a5c'],['#c47ab8','#2f3746'],['#e5c05a','#45536b'],['#7aa7a0','#3a3f4a']];
+let sci=0;
+for(const rz of [2.9,4.6]) for(let i=0;i<6;i++){
+  const cx=2+i*1.0; chair(cx,rz,0);
+  if((i+(rz>3?1:0))%2===0 && i!==5){ const c=seatedColors[sci++%seatedColors.length]; const p=place(makePerson({shirt:c[0],pants:c[1],hair:sci%3?'#2a211c':'#8f8f8f'}),cx,rz,0); sitPose(p); }
+}
+
+/* ---- Station 4: lab ---- */
+door(-14,-4.5,STEPS[3].color,'ห้องปฏิบัติการ (แล็บ)');
+box(world,2.4,0.78,0.8,deskM,-14,0,-10.4);
+cyl(world,0.26,0.47,mat('#6b5fa0',{roughness:.6}),-14,0,-9.15);
+box(world,0.55,0.08,0.18,mat('#a66ee0'),-14.6,0.78,-10.2,0,false);
+const tubeCols=['#c0392b','#8e44ad','#2980b9','#f1c40f','#16a085'];
+for(let i=0;i<5;i++) cyl(world,0.035,0.22,mat(tubeCols[i],{roughness:.4}),-13.4+i*0.11,0.8,-10.55,false);
+box(world,0.6,0.08,0.22,frameM,-13.18,0.78,-10.55,0,false);
+STEPS[3].npc=place(makePerson({shirt:'#7fa7e0',pants:'#7fa7e0',hair:'#1f1712'}),-14,-11.6,0);
+chair(-14,-12.3,0);
+box(world,7,0.9,0.75,deskM,-15,0,-15.3);
+box(world,0.4,0.55,0.4,mat('#e4e7ea'),-17.5,0.9,-15.3); cyl(world,0.07,0.35,darkM,-17.5,1.45,-15.2);
+cyl(world,0.3,0.35,mat('#cfd6dc',{metalness:.3,roughness:.4}),-15.6,0.9,-15.3);
+box(world,0.5,0.4,0.4,mat('#e9edf0'),-13.2,0.9,-15.3);
+box(world,1.2,2.1,0.85,mat('#f4f7fa'),-22.6,0,-15.0);
+box(world,1.22,0.08,0.87,mat(STEPS[3].color),-22.6,1.5,-15.0,0,false);
+chair(-19.5,-6,0); chair(-18.6,-6,0);
+plant(-23,-6);
+
+/* ---- Station 5: doctor ---- */
+door(0,-4.5,STEPS[4].color,'ห้องตรวจแพทย์');
+box(world,2.2,0.76,1.0,woodM,0,0,-10.6);
+box(world,0.7,0.45,0.06,darkM,0.55,0.95,-10.85,-0.3);
+box(world,0.12,0.2,0.12,darkM,0.55,0.76,-10.85,0,false);
+box(world,0.5,0.03,0.35,mat('#ffffff'),-0.45,0.76,-10.4,0.2,false);
+cyl(world,0.25,0.47,mat('#3d6f9f',{roughness:.6}),0,0,-9.1);
+chair(0,-12.4,0);
+STEPS[4].npc=place(makePerson({shirt:'#fbfbfb',pants:'#2c3e5a',coat:true,steth:true,hair:'#3a2b20'}),0,-11.7,0);
+box(world,1.0,0.66,2.2,mat('#6fa9c4',{roughness:.6}),4.6,0,-12.2);
+box(world,1.04,0.14,2.24,mat('#ffffff'),4.6,0.66,-12.2);
+box(world,0.7,0.12,0.4,mat('#dfeef6'),4.6,0.8,-13.05);
+box(world,0.05,1.9,2.6,mat('#a9dcc4',{roughness:.9}),3.2,0.2,-11.9);
+box(world,0.06,0.06,2.8,frameM,3.2,2.15,-11.9,0,false);
+plant(-5.8,-15);
+
+/* ---- Station 6: pharmacy ---- */
+door(14,-4.5,STEPS[5].color,'ห้องยา — รับยา');
+box(world,5,1.02,0.8,mat('#e3f4ea'),14,0,-10.5);
+box(world,5.1,0.06,0.9,mat(STEPS[5].color,{roughness:.5}),14,1.02,-10.5);
+box(world,5,0.62,0.05,glassM,14,1.08,-10.62,0,false);
+box(world,0.35,0.22,0.25,mat('#ffffff'),13.3,1.08,-10.3,0,false);
+STEPS[5].npc=place(makePerson({shirt:'#fbfbfb',pants:'#2f8f6a',coat:true,hair:'#1e1813'}),14,-11.7,0);
+box(world,8.4,2.3,0.12,mat('#e9e3d6'),14,0,-15.75);
+for(let r=0;r<4;r++) box(world,8.4,0.05,0.6,mat('#d9d0bd'),14,0.3+r*0.52,-15.45,0,false);
+{
+  const N=64, med=new THREE.InstancedMesh(BOX,mat('#ffffff',{roughness:.6}),N), d=new THREE.Object3D(), col=new THREE.Color();
+  const cs=['#e86a5c','#4f9ee0','#f2c14e','#58b884','#b68ae6','#ffffff','#f08fb4'];
+  let i=0;
+  for(let r=0;r<4;r++) for(let c=0;c<16;c++){
+    const h=0.24+((c+r)%3)*0.06, w=0.3+((c*7+r*3)%4)*0.03;
+    d.position.set(10.55+c*0.46,0.35+r*0.52+h/2,-15.45); d.scale.set(w,h,0.32); d.updateMatrix();
+    med.setMatrixAt(i,d.matrix); med.setColorAt(i,col.set(cs[(c*5+r*2)%cs.length])); i++;
+  }
+  med.castShadow=true; world.add(med);
+}
+for(let i=0;i<4;i++) chair(17.5+i*1.0,-3.4,0);
+sitPose(place(makePerson({shirt:'#d98b6a',pants:'#3d4a5c',hair:'#9a9a9a'}),17.5,-3.4,0));
+sitPose(place(makePerson({shirt:'#5b9bd5',pants:'#2f3746'}),19.5,-3.4,0));
+plant(23,-6);
+
+/* ---- Station 7: finance ---- */
+box(world,7.2,2.1,0.2,mat('#f6e4ec'),9,0,12.3);
+box(world,0.2,2.1,2.6,mat('#f6e4ec'),5.5,0,11.1); box(world,0.2,2.1,2.6,mat('#f6e4ec'),12.5,0,11.1);
+box(world,4,1.02,0.8,mat('#fbeef3'),9,0,9.4);
+box(world,4.1,0.06,0.9,mat(STEPS[6].color,{roughness:.5}),9,1.02,9.4);
+box(world,4,0.8,0.05,glassM,9,1.08,9.55,0,false);
+box(world,0.22,0.3,0.06,mat('#ffffff'),10.2,1.08,9.2,0,false);
+box(world,0.4,0.25,0.3,darkM,8.2,1.08,9.6,0,false);
+chair(9,11.3,Math.PI);
+STEPS[6].npc=place(makePerson({shirt:'#e07aa8',pants:'#3b3b4f',hair:'#241a14'}),9,10.6,Math.PI);
+signBox(world,'ห้องการเงิน · ชำระเงิน',STEPS[6].color,'#fff',4.4,0.62,9,2.55,12.2);
+
+/* lobby plants */
+plant(-22.6,12.6); plant(-22.6,-2.2); plant(22.6,-2.2); plant(22.6,6); plant(-10.8,12.8); plant(14.5,12.8);
+
+/* ---- entrance canopy / exit / signage ---- */
+const postM=mat('#dfe3e7',{roughness:.4,metalness:.3});
+for(const px of [-18.6,-11.4]) for(const pz of [14.4,19.2]) cyl(world,0.12,3.3,postM,px,0,pz);
+box(world,7.6,0.12,5.3,new THREE.MeshStandardMaterial({color:'#bfe6f5',transparent:true,opacity:.35,roughness:.1,depthWrite:false}),-15,3.3,16.8,0,false);
+box(world,7.8,0.22,0.22,trimM,-15,3.3,19.35); box(world,7.8,0.22,0.22,trimM,-15,3.3,14.3);
+signBox(world,'ทางเข้า · อาคารผู้ป่วยนอก','#139fc4','#fff',5.4,0.72,-15,3.95,19.35);
+box(world,0.25,3.1,0.4,mat('#46a648'),16.1,0,14); box(world,0.25,3.1,0.4,mat('#46a648'),21.9,0,14);
+box(world,6.05,0.3,0.4,mat('#46a648'),19,3.1,14);
+signBox(world,'ทางออก →','#3c9b3e','#fff',3.2,0.75,19,3.85,14);
+{
+  cyl(world,0.12,3.6,postM,0.2,0,17.4); cyl(world,0.12,3.6,postM,5.8,0,17.4);
+  const t=textCanvas(1024,256,(g,W,H)=>{
+    g.fillStyle='#ffffff'; roundRect(g,4,4,W-8,H-8,30); g.fill();
+    g.fillStyle='#e04848'; g.fillRect(70,58,140,40); g.fillRect(120,8+30,40,140);
+    g.fillRect(70,88,140,40); g.fillRect(120,38,40,170);
+    g.fillStyle='#16324a'; g.font=`800 86px ${FONT}`; g.textBaseline='middle'; g.fillText('โรงพยาบาล',260,100);
+    g.fillStyle='#4b6880'; g.font=`600 46px ${FONT}`; g.fillText('อาคารบริการผู้ป่วยนอก',262,190);
+  });
+  const b=new THREE.Mesh(BOX,new THREE.MeshBasicMaterial({map:t,toneMapped:false})); b.scale.set(6.4,1.6,0.12); b.position.set(3,3.0,17.4); world.add(b);
+}
+
+/* ---- outdoor: trees, lamps, shelter ---- */
+const trunkG=new THREE.CylinderGeometry(0.18,0.26,1.8,8);
+const crownG=new THREE.IcosahedronGeometry(1.35,1);
+const trunkM=mat('#8a6243',{roughness:.9}), crownA=mat('#5fa95a',{roughness:.9,flatShading:true}), crownB=mat('#4c9150',{roughness:.9,flatShading:true});
+function tree(x,z,s=1){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.scale.setScalar(s); world.add(g);
+  const t=new THREE.Mesh(trunkG,trunkM); t.position.y=0.9; t.castShadow=true; g.add(t);
+  const c=new THREE.Mesh(crownG,(Math.round(x+z)&1)?crownA:crownB); c.position.y=2.6; c.castShadow=true; g.add(c);
+  const c2=new THREE.Mesh(crownG,crownA); c2.position.set(0.5,3.4,0.2); c2.scale.setScalar(0.65); c2.castShadow=true; g.add(c2);
+}
+[[-30,6],[-31,-6],[-30,-18],[30,8],[31,-4],[30,-17],[-8,20],[5,21],[11,20.5],[-26,20],[27,20.5],[-20,-21],[-4,-22],[12,-21],[26,-22],[-38,12,1.3],[39,-10,1.3],[-40,-14,1.1],[42,14,1.2],[-22,36,1.2],[8,36,1.3],[34,35,1.1]].forEach(a=>tree(a[0],a[1],a[2]||1));
+const lampM=new THREE.MeshStandardMaterial({color:'#fff7d6',emissive:'#ffe9a8',emissiveIntensity:.6});
+for(const lx of [-30,-6,8,30]){ cyl(world,0.08,3.4,postM,lx,0,23.5); sph(world,0.25,lampM,lx,3.5,23.5); }
+for(const px of [22.6,26.4]) cyl(world,0.08,2.6,postM,px,0,24.6);
+box(world,4.4,0.1,1.6,new THREE.MeshStandardMaterial({color:'#9fd3c4',transparent:true,opacity:.55,depthWrite:false}),24.5,2.6,24.3,0,false);
+box(world,3.2,0.1,0.5,woodM,24.5,0.45,24.0); box(world,3.2,0.08,0.08,frameM,24.5,0,24.0);
+signBox(world,'จุดรับส่งผู้ป่วย','#3c9b3e','#fff',2.6,0.5,24.5,3.0,25.1);
+
+/* ---------------- car ---------------- */
+const car=new THREE.Group(); scene.add(car);
+box(car,3.9,0.75,1.8,mat('#2fa3b5',{roughness:.35,metalness:.2}),0,0.35,0);
+box(car,2.1,0.6,1.62,mat('#24394a',{roughness:.15,metalness:.4}),-0.25,1.1,0);
+box(car,2.0,0.08,1.66,mat('#2fa3b5',{roughness:.35,metalness:.2}),-0.25,1.7,0);
+box(car,0.06,0.16,0.38,new THREE.MeshStandardMaterial({color:'#fffbe8',emissive:'#fff2c0',emissiveIntensity:.8}),1.96,0.75,0.55,0,false);
+box(car,0.06,0.16,0.38,new THREE.MeshStandardMaterial({color:'#fffbe8',emissive:'#fff2c0',emissiveIntensity:.8}),1.96,0.75,-0.55,0,false);
+box(car,0.06,0.14,0.34,new THREE.MeshStandardMaterial({color:'#ff4d4d',emissive:'#c01010',emissiveIntensity:.6}),-1.96,0.78,0.6,0,false);
+box(car,0.06,0.14,0.34,new THREE.MeshStandardMaterial({color:'#ff4d4d',emissive:'#c01010',emissiveIntensity:.6}),-1.96,0.78,-0.6,0,false);
+const wheelG=new THREE.CylinderGeometry(0.37,0.37,0.3,18); wheelG.rotateX(Math.PI/2);
+const wheels=[];
+for(const wx of [1.25,-1.25]) for(const wz of [0.82,-0.82]){
+  const w=new THREE.Mesh(wheelG,mat('#1f2329',{roughness:.8})); w.position.set(wx,0.37,wz); w.castShadow=true; car.add(w); wheels.push(w);
+  const hub=new THREE.Mesh(BOX,mat('#c9d1d8',{metalness:.6,roughness:.3})); hub.scale.set(0.3,0.06,0.32); w.add(hub);
+}
+car.position.set(-90,0,27.9);
+
+/* ---------------- patient ---------------- */
+const patient=makePerson({shirt:'#ff8a3d',pants:'#34476b',hair:'#3a2a1e'});
+scene.add(patient.root);
+const markerMat=new THREE.MeshBasicMaterial({color:'#ff8a3d',toneMapped:false});
+const marker=new THREE.Group(); patient.root.add(marker);
+{ const cone=new THREE.Mesh(new THREE.ConeGeometry(0.3,0.6,18),markerMat); cone.rotation.x=Math.PI; marker.add(cone);
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(0.2,16,12),markerMat); ball.position.y=0.42; marker.add(ball); }
+marker.position.y=3.3;
+const footRing=new THREE.Mesh(new THREE.RingGeometry(0.62,0.82,40),new THREE.MeshBasicMaterial({color:'#ff9a4d',transparent:true,opacity:.75,toneMapped:false,depthWrite:false}));
+footRing.rotation.x=-Math.PI/2; footRing.position.y=0.06; patient.root.add(footRing);
+let patientYaw=Math.PI;
+
+/* ambient walkers */
+const walkers=[
+  {p:makePerson({shirt:'#6bbf74',pants:'#44506a',hair:'#3a2a1e'}),a:new THREE.Vector3(-20,0,-0.3),b:new THREE.Vector3(20,0,-0.3),v:1.5,off:6},
+  {p:makePerson({shirt:'#fbfbfb',pants:'#fbfbfb',cap:true}),a:new THREE.Vector3(-21,0,1.7),b:new THREE.Vector3(-7.5,0,1.7),v:1.2,off:3},
+  {p:makePerson({shirt:'#8a7ad6',pants:'#3a3f4a',hair:'#9a9a9a'}),a:new THREE.Vector3(-30,0,24.5),b:new THREE.Vector3(-20,0,24.5),v:1.0,off:2},
+];
+walkers.forEach(w=>{ scene.add(w.p.root); w.L=w.a.distanceTo(w.b); w.yaw=Math.atan2(w.b.x-w.a.x,w.b.z-w.a.z); w.cur=w.yaw; });
+
+/* ---------------- stations visuals ---------------- */
+const ringG=new THREE.TorusGeometry(1.05,0.07,8,48); ringG.rotateX(Math.PI/2);
+const discG=new THREE.CircleGeometry(1.05,40); discG.rotateX(-Math.PI/2);
+const hitMat=new THREE.MeshBasicMaterial({visible:false});
+const hitG=new THREE.CylinderGeometry(1.5,1.5,3.4,12);
+const poleG=new THREE.CylinderGeometry(0.035,0.035,1,6);
+const pickables=[];
+function makeLabelTex(s){
+  return textCanvas(512,150,(g,W,H)=>{
+    g.shadowColor='rgba(20,40,60,.28)'; g.shadowBlur=14; g.shadowOffsetY=4;
+    g.fillStyle='rgba(255,255,255,.97)'; roundRect(g,12,10,W-24,H-30,32); g.fill();
+    g.shadowColor='transparent';
+    g.lineWidth=6; g.strokeStyle=s.color; roundRect(g,12,10,W-24,H-30,32); g.stroke();
+    const cy=10+(H-30)/2;
+    g.fillStyle=s.color; g.beginPath(); g.arc(70,cy,42,0,Math.PI*2); g.fill();
+    g.fillStyle='#fff'; g.font=`800 54px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(s.id),70,cy+3);
+    g.textAlign='left'; g.fillStyle='#17324a'; fitFont(g,s.name,W-160,42,700,22); g.fillText(s.name,126,cy-17);
+    g.fillStyle='#5a7488'; fitFont(g,s.sub,W-160,25,500,15); g.fillText(s.sub,127,cy+24);
+  });
+}
+for(const s of STEPS){
+  const [x,z]=s.pos;
+  s.ringMat=new THREE.MeshBasicMaterial({color:s.color,transparent:true,opacity:.9,toneMapped:false});
+  s.ring=new THREE.Mesh(ringG,s.ringMat); s.ring.position.set(x,0.08,z); world.add(s.ring);
+  s.discMat=new THREE.MeshBasicMaterial({color:s.color,transparent:true,opacity:.2,depthWrite:false,toneMapped:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+  s.disc=new THREE.Mesh(discG,s.discMat); s.disc.position.set(x,0.03,z); world.add(s.disc);
+  s.labelMat=new THREE.SpriteMaterial({map:makeLabelTex(s),depthTest:false,transparent:true,toneMapped:false});
+  s.label=new THREE.Sprite(s.labelMat); s.label.scale.set(4.4,1.29,1); s.label.position.set(x,4.5,z); s.label.renderOrder=10;
+  s.label.userData.stepId=s.id; world.add(s.label); pickables.push(s.label);
+  s.poleMat=new THREE.MeshBasicMaterial({color:s.color,transparent:true,opacity:.6,toneMapped:false});
+  const pole=new THREE.Mesh(poleG,s.poleMat); pole.scale.y=3.8; pole.position.set(x,1.9,z); world.add(pole); s.pole=pole;
+  const hit=new THREE.Mesh(hitG,hitMat); hit.position.set(x,1.7,z); hit.userData.stepId=s.id; world.add(hit); pickables.push(hit);
+}
+const beaconMat=new THREE.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,toneMapped:false,blending:THREE.AdditiveBlending});
+const beacon=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,3.4,36,1,true),beaconMat);
+beacon.visible=false; world.add(beacon);
+
+/* ---------------- route / path ---------------- */
+const PATH_Y=0.07, DWELL=1.7, INTRO=0.7, OUTRO=3.2, RSEG=6;
+const pathBaseMat=new THREE.MeshBasicMaterial({color:'#62d6f5',transparent:true,opacity:.4,depthWrite:false,toneMapped:false});
+const pathDoneMat=new THREE.MeshBasicMaterial({color:'#24e4ff',toneMapped:false});
+const pathGlowMat=new THREE.MeshBasicMaterial({color:'#7cf1ff',transparent:true,opacity:.3,depthWrite:false,toneMapped:false});
+const tubeBase=new THREE.Mesh(new THREE.BufferGeometry(),pathBaseMat);
+const tubeDone=new THREE.Mesh(new THREE.BufferGeometry(),pathDoneMat);
+const tubeGlow=new THREE.Mesh(new THREE.BufferGeometry(),pathGlowMat);
+tubeGlow.renderOrder=2; world.add(tubeBase,tubeDone,tubeGlow);
+const FLOW_N=70;
+const flow=new THREE.InstancedMesh(new THREE.SphereGeometry(0.12,10,8),new THREE.MeshBasicMaterial({color:'#e8fdff',toneMapped:false}),FLOW_N);
+flow.frustumCulled=false; world.add(flow);
+
+function makeCurve(pts){
+  const v=[];
+  for(const p of pts){ const q=new THREE.Vector3(p[0],PATH_Y,p[1]); if(!v.length||v[v.length-1].distanceToSquared(q)>1e-4) v.push(q); }
+  return v.length===2? new THREE.LineCurve3(v[0],v[1]) : new THREE.CatmullRomCurve3(v,false,'centripetal');
+}
+let route=null;
+function buildRoute(){
+  const active=STEPS.filter(s=>s.enabled);
+  const legs=[]; let prev=START, prevStep=null;
+  for(const s of active){
+    legs.push({step:s,curve:makeCurve([prev,...(prevStep?prevStep.leave:[]),...s.approach,s.pos])});
+    prev=s.pos; prevStep=s;
+  }
+  let total=0; for(const l of legs){ l.len=l.curve.getLength(); total+=l.len; }
+  const speed=Math.max(4,total/23);
+  let t=INTRO, s=0;
+  for(const l of legs){
+    l.t0=t; l.t1=t+Math.max(0.8,l.len/speed); l.t2=l.t1+(l.step.id===8?1.3:DWELL); l.s0=s; s+=l.len; t=l.t2;
+  }
+  const path=new THREE.CurvePath(); legs.forEach(l=>path.add(l.curve));
+  const tub=Math.max(80,Math.ceil(total*3));
+  [tubeBase,tubeDone,tubeGlow].forEach(m=>m.geometry.dispose());
+  tubeBase.geometry=new THREE.TubeGeometry(path,tub,0.06,RSEG,false);
+  tubeDone.geometry=new THREE.TubeGeometry(path,tub,0.1,RSEG,false);
+  tubeGlow.geometry=new THREE.TubeGeometry(path,tub,0.28,RSEG,false);
+  route={legs,total,T:t+OUTRO,path,tub};
+}
+buildRoute();
+
+const _p=new THREE.Vector3(), _tn=new THREE.Vector3();
+function sample(t){
+  const L=route.legs;
+  if(t<L[0].t0) return {phase:'intro',legIdx:-1,s:0};
+  for(let i=0;i<L.length;i++){
+    const l=L[i];
+    if(t<l.t1){
+      const u=(t-l.t0)/(l.t1-l.t0), e=easeInOutSine(u);
+      l.curve.getPointAt(clamp(e,0,1),_p); l.curve.getTangentAt(clamp(e,0.002,0.998),_tn);
+      return {phase:'walk',legIdx:i,u,s:l.s0+e*l.len,x:_p.x,z:_p.z,yaw:Math.atan2(_tn.x,_tn.z)};
+    }
+    if(t<l.t2) return {phase:'dwell',legIdx:i,u:(t-l.t1)/(l.t2-l.t1),s:l.s0+l.len};
+  }
+  return {phase:'outro',legIdx:L.length-1,u:clamp((t-L[L.length-1].t2)/OUTRO,0,1),s:route.total};
+}
+
+/* ---------------- state ---------------- */
+let tl=0, playing=!reduceMotion, speed=1, follow=true, realTime=0, lastInteract=-10;
+if(reduceMotion) tl=route.legs[0].t1+0.05;
+const clock=new THREE.Clock();
+
+/* ---------------- pose ---------------- */
+function pose(p,phase,amp,sit,armMode,armAmt,t){
+  const sw=Math.sin(phase)*0.62*amp;
+  p.legL.rotation.x=sw*(1-sit)-1.45*sit;
+  p.legR.rotation.x=-sw*(1-sit)-1.45*sit;
+  let aL=-sw*0.8-0.4*sit, aR=sw*0.8-0.4*sit, zR=-0.06;
+  if(armMode && armAmt>0){
+    if(armMode==='L') aL=lerp(aL,-1.25,armAmt);
+    else if(armMode==='R') aR=lerp(aR,-1.1+0.14*Math.sin(t*9),armAmt);
+    else if(armMode==='wave'){ aR=lerp(aR,-2.75,armAmt); zR=lerp(zR,-0.3+0.38*Math.sin(t*10),armAmt); }
+  }
+  p.armL.rotation.x=aL; p.armR.rotation.x=aR; p.armL.rotation.z=0.06; p.armR.rotation.z=zR;
+  p.body.position.y=Math.abs(Math.cos(phase))*0.05*amp-0.3*sit;
+}
+
+/* ---------------- per-frame updates ---------------- */
+function carX(t){
+  const last=route.legs[route.legs.length-1], leave=last.t2+OUTRO*0.35;
+  if(t<2) return -90;
+  if(t<9) return lerp(-90,19,easeOutCubic((t-2)/7));
+  if(t<leave) return 19;
+  return 19+easeInCubic(clamp((t-leave)/(OUTRO*0.65),0,1))*100;
+}
+function updatePatient(st,dt){
+  let x,z,yaw,amp=0,phase=st.s*2.0,sit=0,scale=1,arm=null,armAmt=0;
+  const L=route.legs;
+  if(st.phase==='intro'){ x=START[0]; z=START[1]; yaw=Math.PI; scale=easeOutCubic(clamp(tl/INTRO,0,1)); }
+  else if(st.phase==='walk'){ x=st.x; z=st.z; yaw=st.yaw; amp=clamp(Math.min(st.u,1-st.u)*7,0,1); }
+  else if(st.phase==='dwell'){
+    const l=L[st.legIdx], s=l.step; x=s.pos[0]; z=s.pos[1]; yaw=Math.atan2(s.face[0],s.face[1]);
+    const k=smooth(clamp(Math.min(tl-l.t1,l.t2-tl)/0.35,0,1));
+    sit=s.sit?k:0; arm=s.arm; armAmt=k;
+  }else{
+    const s=L[L.length-1].step, u=st.u;
+    if(u<0.35){
+      const k=easeInOutSine(u/0.35);
+      x=lerp(s.pos[0],18.7,k); z=lerp(s.pos[1],26.7,k); yaw=0; amp=clamp(Math.min(k,1-k)*6,0,1);
+      phase=(route.total+k*2.4)*2.0; scale=u>0.27?clamp(1-(u-0.27)/0.08,0,1):1;
+    }else{ x=18.7; z=26.7; yaw=0; scale=0; }
+  }
+  patient.root.position.set(x,0,z);
+  patientYaw=lerpAngle(patientYaw,yaw,1-Math.exp(-dt*10));
+  if(dt===0) patientYaw=yaw;
+  patient.root.rotation.y=patientYaw;
+  patient.root.scale.setScalar(0.78*Math.max(scale,0.0001));
+  patient.root.visible=scale>0.001;
+  pose(patient,phase,amp,sit,arm,armAmt,tl);
+  marker.position.y=3.3+Math.sin(tl*3.2)*0.15;
+  marker.rotation.y=tl*1.5;
+  const active=(st.phase==='dwell')?L[st.legIdx].step.color:'#ff8a3d';
+  markerMat.color.set(active);
+}
+function updateCar(){
+  const x=carX(tl); car.position.x=x;
+  for(const w of wheels) w.rotation.z=-x/0.37;
+}
+function updateWalkers(dt){
+  for(const w of walkers){
+    const d=(tl*w.v+w.off)%(2*w.L), fwd=d<w.L, s=fwd?d:2*w.L-d;
+    w.p.root.position.lerpVectors(w.a,w.b,s/w.L);
+    const target=fwd?w.yaw:w.yaw+Math.PI;
+    w.cur=lerpAngle(w.cur,target,1-Math.exp(-dt*6)); w.p.root.rotation.y=w.cur;
+    const edge=Math.min(s,w.L-s); pose(w.p,d*2.2,clamp(edge*2,0.25,1),0,null,0,tl);
+  }
+}
+const _f=new THREE.Vector3(), _d=new THREE.Object3D();
+function updatePath(st){
+  const frac=clamp(st.s/route.total,0,1);
+  const n=Math.floor(frac*route.tub)*RSEG*6;
+  tubeDone.geometry.setDrawRange(0,n); tubeGlow.geometry.setDrawRange(0,n);
+  pathGlowMat.opacity=0.22+0.1*Math.sin(realTime*3);
+  const off=tl*1.3/route.total;
+  for(let i=0;i<FLOW_N;i++){
+    const f=Math.min(((i/FLOW_N)+off)%1,0.9995);
+    const r=route.path.getPointAt(f,_f);
+    if(r) _d.position.copy(r); 
+    _d.position.y=PATH_Y+0.03;
+    _d.scale.setScalar(f<frac?0.55:1);
+    _d.updateMatrix(); flow.setMatrixAt(i,_d.matrix);
+  }
+  flow.instanceMatrix.needsUpdate=true;
+}
+function updateStations(st,dt){
+  const L=route.legs, cur=st.legIdx>=0?L[st.legIdx].step:L[0].step;
+  const pulse=reduceMotion?0.5:(Math.sin(realTime*4)*0.5+0.5);
+  for(const s of STEPS){
+    const leg=L.find(l=>l.step===s);
+    const isCur=s===cur && st.phase!=='intro';
+    const dwelling=isCur && st.phase==='dwell';
+    const done=leg && (tl>=leg.t2);
+    let ringScale=1, ringOp=0.9, discOp=0.18, labelOp=1, labelScale=1;
+    if(!s.enabled){ ringOp=0.25; discOp=0.05; labelOp=0.38; s.ringMat.color.set('#9aa6b2'); s.discMat.color.set('#9aa6b2'); }
+    else{
+      s.ringMat.color.set(s.color); s.discMat.color.set(s.color);
+      if(dwelling){ ringScale=1+0.18*pulse; discOp=0.32+0.15*pulse; labelScale=1.14; }
+      else if(isCur){ ringScale=1+0.08*pulse; labelScale=1.06; }
+      else if(!done){ ringOp=0.6; }
+    }
+    s.ring.scale.set(ringScale,1,ringScale); s.ringMat.opacity=ringOp; s.discMat.opacity=discOp;
+    s.labelMat.opacity=labelOp; s.poleMat.opacity=s.enabled?0.6:0.2;
+    const ls=s.label.userData.sc=lerp(s.label.userData.sc||1,labelScale,1-Math.exp(-dt*8));
+    s.label.scale.set(4.4*ls,1.29*ls,1);
+    s.label.position.y=4.5+(isCur&&s.enabled?Math.sin(realTime*2.4)*0.12:0);
+    /* staff gesture */
+    const tgt=dwelling?1:0; s.npcAmt=lerp(s.npcAmt,tgt,1-Math.exp(-dt*5));
+    if(s.npc){ s.npc.armR.rotation.x=-0.95*s.npcAmt+0.22*Math.sin(tl*6)*s.npcAmt; s.npc.armL.rotation.x=-0.3*s.npcAmt; s.npc.body.position.y=0.02*Math.sin(tl*2+s.id); }
+  }
+  /* kiosk screen */
+  kioskScreens.forEach((m,i)=>{ m.emissiveIntensity=0.45+((i===1&&cur.id===2&&st.phase==='dwell')?0.9+0.5*pulse:0.1*Math.sin(realTime*2+i)); });
+  /* beacon */
+  if(st.phase==='dwell' && cur.enabled){
+    const l=L[st.legIdx], k=smooth(clamp(Math.min(tl-l.t1,l.t2-tl)/0.3,0,1));
+    beacon.visible=true; beacon.position.set(cur.pos[0],1.7,cur.pos[1]);
+    beaconMat.color.set(cur.color); beaconMat.opacity=0.16*k; beacon.scale.set(1,0.6+0.4*k,1);
+  }else beacon.visible=false;
+}
+
+/* ---------------- camera controls ---------------- */
+const R_MIN=12, R_MAX=95, PHI_MIN=0.22, PHI_MAX=1.3;
+const center=new THREE.Vector3(0,0.6,3);
+function defaultRadius(){ const a=innerWidth/innerHeight; return a<0.75?84:a<1.25?64:52; }
+const view={theta:0.45,phi:0.9,radius:defaultRadius()};
+const goal={...view};
+const target=center.clone(), _desired=new THREE.Vector3();
+function resetView(){ goal.theta=0.45; goal.phi=0.9; goal.radius=defaultRadius(); lastInteract=realTime-10; }
+function updateCamera(dt){
+  if(playing && !reduceMotion && realTime-lastInteract>3.5) goal.theta+=dt*0.035;
+  const k=1-Math.exp(-dt*7);
+  view.theta+=(goal.theta-view.theta)*k; view.phi+=(goal.phi-view.phi)*k; view.radius+=(goal.radius-view.radius)*k;
+  if(follow){ _desired.copy(center).lerp(patient.root.position,0.55); _desired.y=0.6; }
+  else _desired.copy(center);
+  target.lerp(_desired,1-Math.exp(-dt*2.2));
+  const sp=Math.sin(view.phi);
+  camera.position.set(target.x+view.radius*sp*Math.sin(view.theta),target.y+view.radius*Math.cos(view.phi),target.z+view.radius*sp*Math.cos(view.theta));
+  camera.lookAt(target);
+}
+const el=renderer.domElement;
+const pointers=new Map(); let downX=0,downY=0,moved=false,pinchD=0,pinchR=0;
+const pdist=()=>{ const v=[...pointers.values()]; return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y); };
+el.addEventListener('pointerdown',e=>{
+  el.setPointerCapture(e.pointerId); pointers.set(e.pointerId,{x:e.clientX,y:e.clientY}); lastInteract=realTime;
+  if(pointers.size===1){ downX=e.clientX; downY=e.clientY; moved=false; }
+  else if(pointers.size===2){ pinchD=pdist(); pinchR=goal.radius; moved=true; }
+});
+el.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId)){ hover(e); return; }
+  const p=pointers.get(e.pointerId); const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY; lastInteract=realTime;
+  if(pointers.size===1){
+    if(Math.hypot(e.clientX-downX,e.clientY-downY)>5) moved=true;
+    goal.theta-=dx*0.0065; goal.phi=clamp(goal.phi-dy*0.005,PHI_MIN,PHI_MAX);
+  }else if(pointers.size===2){
+    const d=pdist(); if(d>0&&pinchD>0) goal.radius=clamp(pinchR*pinchD/d,R_MIN,R_MAX);
+  }
+});
+function endPointer(e){
+  if(!pointers.has(e.pointerId)) return;
+  const single=pointers.size===1; pointers.delete(e.pointerId);
+  if(e.type==='pointerup' && single && !moved) pick(e);
+}
+el.addEventListener('pointerup',endPointer); el.addEventListener('pointercancel',endPointer);
+el.addEventListener('wheel',e=>{ e.preventDefault(); goal.radius=clamp(goal.radius*Math.exp(e.deltaY*0.0012),R_MIN,R_MAX); lastInteract=realTime; },{passive:false});
+el.addEventListener('dblclick',()=>{ resetView(); toast('รีเซ็ตมุมมองแล้ว'); });
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function hitStep(e){
+  const r=el.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  const h=ray.intersectObjects(pickables,false);
+  return h.length?h[0].object.userData.stepId:null;
+}
+function pick(e){ const id=hitStep(e); if(id) selectStep(id); }
+let lastHover=0;
+function hover(e){
+  if(realTime-lastHover<0.06) return; lastHover=realTime;
+  el.style.cursor=hitStep(e)?'pointer':'grab';
+}
+
+/* ---------------- UI ---------------- */
+const playBtn=$('playBtn'), prompt=$('playPrompt');
+function setPlaying(v){
+  playing=v; playBtn.textContent=v?'⏸ หยุดชั่วคราว':'▶ เล่น'; playBtn.setAttribute('aria-pressed',String(v));
+  if(v) prompt.hidden=true;
+}
+function togglePlay(){ setPlaying(!playing); }
+playBtn.addEventListener('click',togglePlay);
+prompt.addEventListener('click',()=>setPlaying(true));
+$('speedSel').addEventListener('change',e=>{ speed=parseFloat(e.target.value)||1; });
+const followBtn=$('followBtn');
+followBtn.addEventListener('click',()=>{ follow=!follow; followBtn.setAttribute('aria-pressed',String(follow)); });
+$('resetBtn').addEventListener('click',resetView);
+$('prevBtn').addEventListener('click',()=>stepNav(-1));
+$('nextBtn').addEventListener('click',()=>stepNav(1));
+
+let toastTimer=0;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
+
+const listEl=$('stepList');
+for(const s of STEPS){
+  const d=document.createElement('div');
+  d.className='step'; d.tabIndex=0; d.setAttribute('role','button'); d.setAttribute('aria-label',`ขั้นตอนที่ ${s.id} ${s.name}`);
+  d.innerHTML=`<span class="num" style="background:${s.color}">${s.id}</span><span class="txt">${s.name}<small>${s.sub}</small></span>`;
+  if(s.optional){
+    const lab=document.createElement('label'); lab.className='sw'; lab.title='เปิด/ปิดขั้นตอนนี้';
+    lab.innerHTML=`<input type="checkbox" checked aria-label="เปิดหรือปิดขั้นตอน ${s.name}"><span></span>`;
+    lab.addEventListener('click',e=>e.stopPropagation());
+    lab.addEventListener('keydown',e=>e.stopPropagation());
+    lab.querySelector('input').addEventListener('change',e=>setEnabled(s,e.target.checked));
+    d.appendChild(lab);
+  }
+  d.addEventListener('click',()=>selectStep(s.id));
+  d.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectStep(s.id); } });
+  s.el=d; listEl.appendChild(d);
+}
+
+function selectStep(id){
+  const s=byId[id];
+  if(!s.enabled){ toast(`ขั้นตอนที่ ${id} ${s.name} ปิดอยู่ — เปิดสวิตช์เพื่อรวมไว้ในเส้นทาง`); return; }
+  const leg=route.legs.find(l=>l.step===s);
+  tl=leg.t1+0.4; setPlaying(false);
+  goal.radius=Math.min(goal.radius,innerWidth/innerHeight<1?48:34);
+  lastInteract=realTime; uiKey='';
+}
+function stepNav(dir){
+  const st=sample(tl), L=route.legs; let i=st.legIdx;
+  if(dir>0){ i=(st.phase==='walk'||st.phase==='intro')?Math.max(i,0):i+1; if(st.phase==='intro') i=0; }
+  else{ i=i-1; }
+  if(i>=L.length) i=0; if(i<0) i=L.length-1;
+  selectStep(L[i].step.id);
+}
+function setEnabled(step,on){
+  const st=sample(tl), old=st.legIdx>=0?route.legs[st.legIdx]:null;
+  const anchorId=old?old.step.id:null, offset=old?tl-old.t0:0, outroOff=old?tl-old.t2:0;
+  step.enabled=on; buildRoute();
+  const L=route.legs;
+  if(st.phase==='intro'){ /* keep */ }
+  else if(st.phase==='outro'){ tl=L[L.length-1].t2+outroOff; }
+  else{
+    let leg=L.find(l=>l.step.id===anchorId);
+    if(leg) tl=Math.min(leg.t0+offset,leg.t2-0.01);
+    else{ leg=L.find(l=>l.step.id>anchorId)||L[0]; tl=leg.t0; }
+  }
+  tl=clamp(tl,0,route.T-0.001);
+  uiKey=''; refreshList(sample(tl));
+  toast(on?`เปิดขั้นตอน "${step.name}" แล้ว เส้นทางปรับใหม่`:`ข้ามขั้นตอน "${step.name}" แล้ว เส้นทางปรับใหม่`);
+}
+
+addEventListener('keydown',e=>{
+  const tg=e.target;
+  if(e.code==='Space'||e.key===' '){
+    if(tg.closest && tg.closest('select,input,textarea,.step')) return;
+    e.preventDefault(); if(!e.repeat) togglePlay();
+  }else if(e.key==='ArrowRight'&&!(tg.closest&&tg.closest('select'))){ stepNav(1); }
+  else if(e.key==='ArrowLeft'&&!(tg.closest&&tg.closest('select'))){ stepNav(-1); }
+});
+addEventListener('keyup',e=>{ if((e.code==='Space'||e.key===' ')&&e.target.tagName==='BUTTON') e.preventDefault(); });
+
+const infoBadge=$('infoBadge'), infoState=$('infoState'), infoTitle=$('infoTitle'), infoDesc=$('infoDesc'), barFill=$('barFill'), timeText=$('timeText');
+let uiKey='', lastSec=-1;
+function refreshList(st){
+  const L=route.legs;
+  for(const s of STEPS){
+    const leg=L.find(l=>l.step===s);
+    const isCur=st.legIdx>=0 ? L[st.legIdx].step===s : s===L[0].step;
+    s.el.classList.toggle('active',isCur);
+    s.el.classList.toggle('done',!!leg && (tl>=leg.t2 || st.phase==='outro'));
+    s.el.classList.toggle('off',!s.enabled);
+  }
+}
+function updateUI(st){
+  const L=route.legs, leg=st.legIdx>=0?L[st.legIdx]:L[0], s=leg.step;
+  const key=st.phase+'|'+s.id;
+  if(key!==uiKey){
+    uiKey=key;
+    infoBadge.textContent=s.id; infoBadge.style.background=s.color;
+    infoState.textContent= st.phase==='dwell'?'กำลังรับบริการ' : st.phase==='outro'?'ขึ้นรถกลับบ้าน · เริ่มรอบใหม่เร็ว ๆ นี้' : st.phase==='intro'?'คนไข้มาถึงโรงพยาบาล':'กำลังเดินไป';
+    infoTitle.textContent=`ขั้นตอนที่ ${s.id} · ${s.name}`;
+    infoDesc.textContent= st.phase==='outro' ? 'คนไข้ขึ้นรถที่จุดรับส่งและเดินทางกลับบ้าน เสร็จสิ้นการรับบริการผู้ป่วยนอกครบทุกขั้นตอน' : s.desc;
+    refreshList(st);
+  }
+  barFill.style.transform=`scaleX(${(tl/route.T).toFixed(4)})`;
+  const sec=Math.floor(tl);
+  if(sec!==lastSec){ lastSec=sec; timeText.textContent=`${sec} / ${Math.round(route.T)} วินาที`; }
+}
+
+if(reduceMotion){ prompt.hidden=false; }
+setPlaying(playing);
+
+/* ---------------- resize / loop ---------------- */
+function onResize(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); fitBackground();
+}
+addEventListener('resize',onResize);
+
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clock.getDelta(),0.05);
+  realTime+=dt;
+  if(playing){ tl+=dt*speed; if(tl>=route.T){ tl%=route.T; uiKey=''; } }
+  const st=sample(tl);
+  updatePatient(st,dt);
+  updateCar();
+  updateWalkers(dt);
+  updatePath(st);
+  updateStations(st,dt);
+  updateCamera(dt);
+  updateUI(st);
+  renderer.render(scene,camera);
+}
+updatePatient(sample(tl),0);
+updateCamera(1);
+frame();
+}
+</script>
+</body>
+</html>
