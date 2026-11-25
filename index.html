@@ -106,6 +106,25 @@
       backdrop-filter: blur(10px);
     }
 
+    .session-panel { margin-bottom: 14px; }
+
+    .sid-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sid-status {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .sid-status[data-state="ok"] { color: var(--success); }
+    .sid-status[data-state="bad"] { color: var(--danger); }
+
     .field { min-width: 0; }
 
     .field label {
@@ -394,6 +413,20 @@
       </div>
     </header>
 
+    <section class="host-panel session-panel" aria-labelledby="sid-title">
+      <div class="field">
+        <label id="sid-title" for="sid-input">BMS Session ID</label>
+        <input id="sid-input" type="text" autocomplete="off" spellcheck="false" aria-describedby="sid-help"
+               placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX">
+        <span class="field-help" id="sid-help">ขอจาก HOSxP เมนู BMS Session — ใส่ที่นี่ครั้งเดียว เปิดแอปไหนก็ต่อให้อัตโนมัติ</span>
+      </div>
+      <div class="sid-buttons">
+        <button class="secondary-button" id="sid-connect" type="button">เชื่อมต่อ</button>
+        <button class="secondary-button" id="sid-clear" type="button" hidden>ล้าง</button>
+      </div>
+      <p class="sid-status" id="sid-status" role="status" aria-live="polite"></p>
+    </section>
+
     <section class="host-panel" aria-labelledby="host-title">
       <div class="field">
         <label id="host-title" for="host-input">ชื่อเครื่องหรือไอพีที่เปิดแอป</label>
@@ -451,11 +484,19 @@
     ];
 
     const STORAGE_KEY = "bms3d.host";
+    const SID_KEY = "bms3d.sid";
+    const SID_PARAM = "bms-session-id";                 // ชื่อพารามิเตอร์ที่ทั้งสองแอปรับ
+    const PASTEJSON_URL = "https://hosxp.net/phapi/PasteJSON";
+    const APP_SID_KEYS = ["pj3d.sid", "lab3d.sid"];     // ที่เก็บ session ของแต่ละแอป (ดู LS_SID ในแอป)
     const defaultHost = location.protocol === "file:" ? "localhost" : (location.hostname || "localhost");
     const hostInput = document.querySelector("#host-input");
+    const sidInput = document.querySelector("#sid-input");
+    const sidStatus = document.querySelector("#sid-status");
+    const sidClear = document.querySelector("#sid-clear");
     const appsGrid = document.querySelector("#apps-grid");
     const activeChecks = new Map();
     let changeTimer;
+    let sid = "";
 
     function appIcon(key) {
       if (key === "lab-visit-3d") {
@@ -529,9 +570,11 @@
        จึงสร้างลิงก์จากพอร์ตของหน้านี้เอง เปลี่ยนพอร์ตใน start.bat แล้วไม่ต้องมาแก้ที่นี่ */
     const appPort = location.port || "8805";
 
+    /* base = ที่อยู่เปล่า ๆ (ใช้ตรวจว่าเซิร์ฟเวอร์เปิดอยู่ไหม จะได้ไม่ส่ง session ไปโดยไม่จำเป็น)
+       live = ที่อยู่ที่แนบ session ให้แอปต่อเองอัตโนมัติ (แอปจะลบออกจากแถบที่อยู่ให้เอง) */
     function appUrls(app, host) {
-      const live = `http://${host}:${appPort}/${app.path}`;
-      return { live, demo: `${live}?demo=1` };
+      const base = `http://${host}:${appPort}/${app.path}`;
+      return { base, live: sid ? `${base}?${SID_PARAM}=${encodeURIComponent(sid)}` : base };
     }
 
     /* ทั้งการ์ดคือลิงก์เดียว (ดู .card-link::after) คลิกตรงไหนในกรอบก็เปิดแอปนั้น */
@@ -565,7 +608,7 @@
       try {
         /* HEAD พอรู้ว่าเซิร์ฟเวอร์เปิดอยู่ไหม โดยไม่ต้องโหลดทั้งหน้า
            ตอบอะไรกลับมาก็ถือว่าเปิดอยู่ (เซิร์ฟเวอร์บางตัวตอบ 405 กับ HEAD) */
-        await fetch(appUrls(app, host).live, {
+        await fetch(appUrls(app, host).base, {
           method: "HEAD",
           mode: "no-cors",
           cache: "no-store",
@@ -588,9 +631,64 @@
       APPS.forEach((app) => checkApp(app, host));
     }
 
+    /* ---- BMS Session -----------------------------------------------------
+       ใส่ครั้งเดียวที่หน้านี้: เก็บไว้ในเครื่องนี้ แนบไปกับลิงก์ของแอป และถ้าอยู่เครื่อง/พอร์ตเดียวกัน
+       ก็เขียนลงที่เก็บ session ของแต่ละแอปให้ด้วย แอปจึงต่อ HOSxP เองได้ทันทีโดยไม่ต้องวางซ้ำ */
+    function readStored(key) {
+      try { return localStorage.getItem(key) || ""; } catch { return ""; }
+    }
+
+    function writeStored(key, value) {
+      try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
+    }
+
+    function setSidStatus(state, text) {
+      sidStatus.dataset.state = state || "";
+      sidStatus.textContent = text;
+    }
+
+    function shareSid(value) {
+      if (location.protocol === "file:") return;
+      APP_SID_KEYS.forEach((key) => writeStored(key, value));
+    }
+
+    async function verifySid(value) {
+      if (!value) {
+        setSidStatus("", "ยังไม่ได้ใส่ session — จะไปใส่ในแอปทีหลังก็ได้");
+        return;
+      }
+      setSidStatus("checking", "กำลังตรวจสอบ session…");
+      const target = `${PASTEJSON_URL}?Action=GET&code=${encodeURIComponent(value)}`;
+      try {
+        const res = await fetch(`/proxy?url=${encodeURIComponent(target)}`, { cache: "no-store" });
+        const data = await res.json();
+        if (data && data.MessageCode === 200) {
+          const info = (data.result && data.result.user_info) || {};
+          const name = info.location || info.name || "ไม่ทราบชื่อโรงพยาบาล";
+          const db = info.bms_database_name ? ` (${info.bms_database_name})` : "";
+          setSidStatus("ok", `ใช้ได้ · ${name}${db} — เปิดแอปแล้วต่อให้เลย`);
+        } else {
+          setSidStatus("bad", `session นี้ใช้ไม่ได้: ${(data && data.Message) || "ไม่ทราบสาเหตุ"}`);
+        }
+      } catch {
+        setSidStatus("bad", "ตรวจสอบไม่ได้ — หน้านี้ต้องเปิดผ่าน start.bat เพราะต้องใช้ /proxy ของเซิร์ฟเวอร์");
+      }
+    }
+
+    function applySid(value) {
+      sid = String(value || "").trim();
+      sidInput.value = sid;
+      sidClear.hidden = !sid;
+      writeStored(SID_KEY, sid);
+      shareSid(sid);
+      updateUrls(cleanHost(hostInput.value || defaultHost));
+      verifySid(sid);
+    }
+
     renderApps();
     const initialHost = cleanHost(getStoredHost() || defaultHost);
     hostInput.value = initialHost;
+    applySid(readStored(SID_KEY));
     updateUrls(initialHost);
     APPS.forEach((app) => checkApp(app, initialHost));
 
@@ -605,6 +703,14 @@
     });
 
     document.querySelector("#use-default").addEventListener("click", () => applyHost(defaultHost));
+
+    document.querySelector("#sid-connect").addEventListener("click", () => applySid(sidInput.value));
+    sidClear.addEventListener("click", () => applySid(""));
+    sidInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      applySid(sidInput.value);
+    });
 
     appsGrid.addEventListener("click", (event) => {
       const button = event.target.closest("[data-check]");

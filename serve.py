@@ -92,6 +92,13 @@ def _prune(now):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # the pages are edited in place; without this a screen can keep showing
+        # yesterday's file after an update until someone presses Ctrl+F5
+        if self.path.split('?')[0].endswith(('.html', '/')):
+            self.send_header('Cache-Control', 'no-store')
+        SimpleHTTPRequestHandler.end_headers(self)
+
     def _cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Accept, Content-Type')
