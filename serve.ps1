@@ -180,9 +180,9 @@ function Send-File($ctx) {
     Send-Bytes $ctx 200 ([IO.File]::ReadAllBytes($full)) $ctype
 }
 
-function Start-Listener([string]$prefix) {
+function Start-Listener([string[]]$prefix) {
     $l = New-Object Net.HttpListener
-    $l.Prefixes.Add($prefix)
+    foreach ($p in $prefix) { $l.Prefixes.Add($p) }
     try { $l.Start() } catch { $l.Close(); throw }
     return $l
 }
@@ -213,7 +213,8 @@ try {
 } catch {
     $failure = Get-RootException $_
     if ($failure -is [Net.HttpListenerException] -and $failure.ErrorCode -eq 5) {
-        try { $listener = Start-Listener "http://localhost:$Port/"; $failure = $null }
+        # both spellings: a prefix for "localhost" alone answers 400 to http://127.0.0.1:PORT/
+        try { $listener = Start-Listener @("http://localhost:$Port/", "http://127.0.0.1:$Port/"); $failure = $null }
         catch { $failure = Get-RootException $_ }
     }
 }
