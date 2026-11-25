@@ -581,6 +581,8 @@ function initStation(s){ s.members=[]; s.count=0; s.over=0; s.max=0; s.avg=0; s.
 ST.forEach((s,i)=>{ byId[s.id]=s; s.no=i+1; initStation(s); });
 const ENTRY=[[-15*S,23*S+2.2],[-15*S,BZ1+0.6],[-15*S,BZ1-2.2]];
 const EXIT=[[19*S,CZ],[19*S,BZ1-2.4],[19*S,BZ1+1.6],[19*S,23*S+1.4]];
+/* รุ่นของผังช่องนั่ง/ยืน — เพิ่มขึ้นเมื่อสร้างผังใหม่ (ย้าย/เพิ่ม/ซ่อนจุด) ช่องที่คนไข้จองไว้ (a.slotIx) จึงถือว่าหมดอายุ */
+let slotGen=0;
 
 /* ---- furniture ---- */
 const seatM=mat('#3b8fb3',{roughness:.6}), frameM=mat('#8d99a6',{roughness:.5,metalness:.4});
@@ -1007,7 +1009,7 @@ function applyStations(){
     s.g.visible=!s.off; s.labelKey=''; refreshLabel(s);
   }
   stationPick.length=0; ST.forEach(s=>{ if(!s.off) stationPick.push(s.label,s.hit); });
-  slotCache.clear(); buildChairs(); $('stList').innerHTML='';
+  slotCache.clear(); slotGen++; WG=null; routeCache.clear(); buildChairs(); $('stList').innerHTML='';
   if(focusSt&&!byId[focusSt.id]) focusSt=null;
 }
 
@@ -1060,15 +1062,121 @@ function pathAt(P,d){
   return [lerp(a[0],b[0],t),lerp(a[1],b[1],t),Math.atan2(b[0]-a[0],b[1]-a[1])];
 }
 const rev=a=>a.slice().reverse();
+/* ---- เดินตามช่องว่างในอาคาร (ไม่ลัดทับเก้าอี้ ไม่ทะลุผนัง) --------------------------
+   กริดเดิน 0.25 ม. ทั่วอาคาร: ปิดช่องที่ห่างเก้าอี้ (ของทุกจุด) < 0.36 ม. และแนวผนังห้อง (เว้นช่องประตู)
+   ทุกช่วงของเส้นทางที่อยู่ในอาคารจะถูกต่อด้วยทางที่หาได้จากกริด (BFS) → เดินเป็นมุมฉากตามช่องระหว่างแถวเก้าอี้
+   ช่วงที่เดินตรงได้อยู่แล้วก็ปล่อยให้เดินตรง (ไม่อ้อมเกินจำเป็น) · จำผลไว้ใช้ซ้ำ เพราะผังเก้าอี้ไม่เปลี่ยนระหว่างรีเฟรช */
+const GRID=0.25, CLR=0.36, ROUTE_MAX=6000;
+let WG=null; const routeCache=new Map();
+function walkGrid(){
+  if(WG) return WG;
+  const x0=-BX+0.25, z0=BZ0+0.25, x1=BX-0.25, z1=BZ1-0.25;
+  const nx=Math.floor((x1-x0)/GRID)+1, nz=Math.floor((z1-z0)/GRID)+1;
+  const ok=new Uint8Array(nx*nz).fill(1);
+  for(const t of ST){                                                      // เก้าอี้รอของทุกจุด
+    if(t.home||t.off) continue;
+    slotsFor(t);
+    for(const c of (t.chairs||[])){
+      const i0=Math.max(0,Math.ceil((c.x-CLR-x0)/GRID)), i1=Math.min(nx-1,Math.floor((c.x+CLR-x0)/GRID));
+      const j0=Math.max(0,Math.ceil((c.z-CLR-z0)/GRID)), j1=Math.min(nz-1,Math.floor((c.z+CLR-z0)/GRID));
+      for(let i=i0;i<=i1;i++) for(let j=j0;j<=j1;j++) ok[i*nz+j]=0;
+    }
+  }
+  for(let i=0;i<nx;i++){                                                   // ผนังหน้าห้อง (เว้นประตู) + ผนังกั้นห้อง
+    const x=x0+i*GRID, door=DOORS.some(d=>Math.abs(x-d)<1.25), side=ROOM_WALLS.some(w=>Math.abs(x-w)<0.32);
+    for(let j=0;j<nz;j++){
+      const z=z0+j*GRID;
+      if((Math.abs(z-WALLZ)<0.32&&!door)||(z<WALLZ&&side)) ok[i*nz+j]=0;
+    }
+  }
+  WG={x0,z0,nx,nz,ok}; return WG;
+}
+const DI=[1,-1,0,0], DJ=[0,0,1,-1];
+const inG=(g,i,j)=>i>=0&&j>=0&&i<g.nx&&j<g.nz;
+const cellX=(g,i)=>g.x0+i*GRID, cellZ=(g,j)=>g.z0+j*GRID;
+function freeNear(g,i,j,ti,tj){                                            // ช่องว่างใกล้ (i,j) ที่สุด (เท่ากันเลือกที่ใกล้ (ti,tj))
+  if(inG(g,i,j)&&g.ok[i*g.nz+j]===1) return [i,j];
+  const R=Math.ceil(1.8/GRID); let best=null, bs=Infinity;
+  for(let a=Math.max(0,i-R);a<=Math.min(g.nx-1,i+R);a++) for(let b=Math.max(0,j-R);b<=Math.min(g.nz-1,j+R);b++){
+    if(g.ok[a*g.nz+b]!==1) continue;
+    const sc=((a-i)*(a-i)+(b-j)*(b-j))*1e6+(ti==null?0:(a-ti)*(a-ti)+(b-tj)*(b-tj));
+    if(sc<bs){ bs=sc; best=[a,b]; }
+  }
+  return best;
+}
+function clearLine(g,ax,az,bx,bz){                                         // เดินตรงจาก a ไป b ได้เลยไหม
+  const L=Math.hypot(bx-ax,bz-az), n=Math.max(1,Math.ceil(L/(GRID*0.8)));
+  for(let k=0;k<=n;k++){
+    const i=Math.round((ax+(bx-ax)*k/n-g.x0)/GRID), j=Math.round((az+(bz-az)*k/n-g.z0)/GRID);
+    if(!inG(g,i,j)) continue;                                              // นอกอาคาร = ลานโล่ง
+    if(g.ok[i*g.nz+j]!==1) return false;
+  }
+  return true;
+}
+/* จุดหักมุมระหว่าง from→to ([] = เดินตรง, null = หาไม่ได้) */
+function route(from,to){
+  const g=walkGrid();
+  if(clearLine(g,from[0],from[1],to[0],to[1])) return [];
+  const si0=Math.round((from[0]-g.x0)/GRID), sj0=Math.round((from[1]-g.z0)/GRID);
+  const gi0=Math.round((to[0]-g.x0)/GRID), gj0=Math.round((to[1]-g.z0)/GRID);
+  if(!inG(g,si0,sj0)||!inG(g,gi0,gj0)) return [];                          // ปลายทางอยู่นอกอาคาร (ทางเข้า/ทางออก) เดินตรง
+  const key=si0+','+sj0+'>'+gi0+','+gj0;
+  if(routeCache.has(key)) return routeCache.get(key);
+  const st=freeNear(g,si0,sj0,gi0,gj0), gl=freeNear(g,gi0,gj0,si0,sj0);
+  if(!st||!gl) return [];
+  const N=g.nx*g.nz, dist=new Int32Array(N).fill(-1), q=new Int32Array(N);
+  let head=0,tail=0; const gk=gl[0]*g.nz+gl[1]; dist[gk]=0; q[tail++]=gk;  // BFS จากปลายทางย้อนออกมา
+  while(head<tail){
+    const k=q[head++], i=(k/g.nz)|0, j=k%g.nz, d=dist[k]+1;
+    for(let t=0;t<4;t++){
+      const ni=i+DI[t], nj=j+DJ[t];
+      if(!inG(g,ni,nj)) continue;
+      const nk=ni*g.nz+nj;
+      if(dist[nk]>=0||g.ok[nk]!==1) continue;
+      dist[nk]=d; q[tail++]=nk;
+    }
+  }
+  let ci=st[0], cj=st[1];
+  if(dist[ci*g.nz+cj]<0){ routeCache.set(key,null); return null; }          // ไปไม่ถึง → ปล่อยให้เดินตรงแบบเดิม
+  const pts=[[cellX(g,ci),cellZ(g,cj)]]; let dir=-1, guard=N+4;
+  while((ci!==gl[0]||cj!==gl[1])&&guard-->0){
+    const here=dist[ci*g.nz+cj];
+    let pick=-1;
+    if(dir>=0){ const ni=ci+DI[dir], nj=cj+DJ[dir];
+      if(inG(g,ni,nj)&&dist[ni*g.nz+nj]===here-1) pick=dir; }              // เดินตรงต่อไปได้ก็ไม่เลี้ยว
+    if(pick<0){ let bd=here;
+      for(let t=0;t<4;t++){ const ni=ci+DI[t], nj=cj+DJ[t];
+        if(!inG(g,ni,nj)) continue;
+        const dd=dist[ni*g.nz+nj]; if(dd>=0&&dd<bd){ bd=dd; pick=t; } }
+    }
+    if(pick<0) break;
+    if(dir>=0&&pick!==dir) pts.push([cellX(g,ci),cellZ(g,cj)]);             // จุดหักมุม
+    dir=pick; ci+=DI[pick]; cj+=DJ[pick];
+  }
+  pts.push([cellX(g,gl[0]),cellZ(g,gl[1])]);
+  if(routeCache.size>ROUTE_MAX) routeCache.clear();
+  routeCache.set(key,pts); return pts;
+}
+/* ต่อทางเดินระหว่างจุดหมายทีละช่วง */
+function joinPath(pts){
+  const out=[];
+  for(const p of pts){
+    if(!out.length){ out.push(p); continue; }
+    const mid=route(out[out.length-1],p);
+    if(mid) for(const q of mid) out.push(q);
+    out.push(p);
+  }
+  return out;
+}
 function moveTo(a,s,slot,instant){
   const prevSt=a.st;
   a.leaving=false; a.dead=false;
   if(instant||!a.placed){
     if(instant){ a.x=slot.x; a.z=slot.z; a.yaw=slot.yaw; a.sitK=slot.sit?1:0; a.sc=1; a.path=null; }
     else{                                                                  // มาใหม่: เข้าประตู → แวะตู้ Kiosk ทุกคน → ไปจุดของตัวเอง
-      const k=KIOSKS[(a.vn.length?hashStr(a.vn):0)%KIOSKS.length], pre=[[a.x,a.z],ENTRY[1],k];
-      a.path=mkPath([...pre,...(s.fromEntry||[[-15*S,CZ],...viaFor(s,slot.z)]),[slot.x,slot.z]]); a.d=0;
-      const P0=mkPath(pre); a.stopD=P0?P0.len:null; a.stopT=KIOSK_SEC;
+      const k=KIOSKS[(a.vn.length?hashStr(a.vn):0)%KIOSKS.length], kiosk=joinPath([[a.x,a.z],ENTRY[1],k]);
+      a.path=mkPath([...kiosk,...joinPath([k,...(s.fromEntry||[[-15*S,CZ],...viaFor(s,slot.z)]),[slot.x,slot.z]])]); a.d=0;
+      const P0=mkPath(kiosk); a.stopD=P0?P0.len:null; a.stopT=KIOSK_SEC;
     }
     a.st=s.id; a.slot=slot; a.placed=true; return;
   }
@@ -1077,16 +1185,16 @@ function moveTo(a,s,slot,instant){
   if(same) return;
   const pts=[[a.x,a.z]];
   const cross=(a.z<WALLZ)!==(slot.z<WALLZ);          // จุดเดิมแต่ย้ายเข้า/ออกห้อง → ลอดประตู
-  if(prevSt!==s.id||cross){ pts.push(...rev(viaFor(byId[prevSt],a.z))); pts.push(...viaFor(s,slot.z)); }
+  if(prevSt!==s.id||cross) pts.push(...rev(viaFor(byId[prevSt],a.z)),...viaFor(s,slot.z));
   pts.push([slot.x,slot.z]);
-  a.path=mkPath(pts); a.d=0; a.stopD=null;
+  a.path=mkPath(joinPath(pts)); a.d=0; a.stopD=null;
 }
 function leave(a){
   if(a.leaving) return;
   a.leaving=true;
   if(a.hide||!a.placed){ a.dead=true; return; }
-  const pts=[[a.x,a.z]]; pts.push(...rev(viaFor(byId[a.st],a.z))); pts.push(...EXIT);
-  a.path=mkPath(pts); a.d=0; a.slot=null; a.stopD=null;
+  const pts=[[a.x,a.z],...rev(viaFor(byId[a.st],a.z)),...EXIT];
+  a.path=mkPath(joinPath(pts)); a.d=0; a.slot=null; a.stopD=null;
 }
 /* ช่องยืน/นั่งของแต่ละจุด: เก้าอี้ก่อน แล้วยืนในพื้นที่ (ใกล้จุดก่อน) — คนเยอะจะยืนชิดขึ้นเอง */
 const slotCache=new Map();
@@ -1794,8 +1902,22 @@ function sync(){
     g.forEach(a=>{ a.since=sinceOf(a); });
     g.sort((x,y)=>x.since-y.since);
     const slots=slotsFor(s,g.length);
-    g.forEach((a,i)=>{
-      const sl=slots[i];
+    /* ช่องของใครก็ของคนนั้น: คนที่ยังอยู่จุดเดิมได้ช่องเดิมทุกครั้งที่รีเฟรช จะไม่ขยับตามคนที่เดินออกไป
+       ที่ว่างถูกเติมด้วยคนที่เพิ่งย้ายมา โดยเริ่มจากช่องที่ใกล้จุดบริการที่สุด (โหลดครั้งแรก = คนที่รอนานสุดได้ช่องใน) */
+    const own=new Array(slots.length), fresh=[];
+    for(const a of g){
+      const ix=a.slotIx;
+      if(a.st===s.id&&a.slotGen===slotGen&&ix!=null&&ix<slots.length&&!own[ix]) own[ix]=a;
+      else fresh.push(a);
+    }
+    let free=0;
+    for(const a of fresh){
+      while(free<slots.length&&own[free]) free++;
+      if(free<slots.length){ own[free]=a; a.slotIx=free; a.slotGen=slotGen; free++; }
+      else a.slotIx=null;                                                  // ล้นที่ → ไม่แสดงตัวในฉาก (ยังนับในตัวเลข)
+    }
+    g.forEach(a=>{
+      const sl=a.slotIx!=null?slots[a.slotIx]:null;
       if(!sl){ a.hide=true; a.st=s.id; a.slot=null; a.path=null; return; }
       const wasHidden=a.hide; a.hide=false;
       if(wasHidden&&a.placed){ a.x=sl.x; a.z=sl.z; a.sc=0; a.path=null; a.st=s.id; a.slot=sl; return; }
