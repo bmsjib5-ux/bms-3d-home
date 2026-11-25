@@ -1,3 +1,8 @@
+# โฟลเดอร์ของแอปทั้งสองวางไว้ในนี้เพื่อให้อยู่ที่เดียวกัน แต่แต่ละตัวเป็น git repo ของตัวเอง
+# (patient-journey-3d → github.com/bmsjib5-ux/patient-journey-3d) จึงไม่เอาเข้า repo ของหน้า home
+patient-journey-3d/
+Lab-visit-3D/
+
 # เครื่องมือ/ขยะของเครื่อง
 .claude/
 .vscode/
