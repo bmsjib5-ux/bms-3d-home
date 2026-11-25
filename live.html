@@ -356,7 +356,7 @@ window.__sceneStarted = true;
    เวลารอที่จุด = ovst.cur_dep_time ถ้ามีคอลัมน์ ไม่งั้นนับจากที่หน้านี้เห็นคนไข้ย้ายจุด (รอบแรกใช้เวลามาถึง vsttime) */
 const APP_NAME='BMS-PatientJourney3D', APP_VERSION='1.0.0';
 const PASTEJSON_URL='https://hosxp.net/phapi/PasteJSON';
-const SID_PARAM='bms-session-id', LS_SID='pj3d.sid', LS_OPT='pj3d.opt.';
+const SID_PARAM='bms-session-id', LS_SID='pj3d.sid', LS_OPT='pj3d.opt.', LS_PREF='pj3d.pref';
 const TIMEOUT_MS=60000, URL_MAX=2000, PAGE_SIZE=1000;
 const $=id=>document.getElementById(id);
 
@@ -1702,31 +1702,43 @@ function resetAll(){
   state.first=true; state.rows=[]; state.slots=new Map(); state.people=new Map(); state.names=new Map(); state.depSeen=new Map();
   selectAvatar(null); focusSt=null;
 }
+/* ค่าตั้งถูกจำไว้สองชั้น เปิดหน้าใหม่หรือเปลี่ยนฐานแล้วได้ค่าที่เคยตั้งไว้กลับมาเสมอ
+   - ค่าแสดงผล (รอบดึงข้อมูล สีเสื้อ เกณฑ์เวลารอ สีเก้าอี้ เจ้าหน้าที่ cur_dep_busy) → `pj3d.pref` ใช้ร่วมทุกฐานและโหมดจำลอง
+   - ค่าที่ผูกกับฐาน (แผนก→จุดบริการ จุดที่แก้/เพิ่มเอง ตัวกรองคลินิก/ห้อง) → `pj3d.opt.<ชื่อฐาน>` (โหมดจำลองใช้ชื่อ demo) */
+const PREF_KEYS=['every','color','y','r','stBy','chairCol','busy5','staff'];
+const optKey=()=>LS_OPT+(state.demo?'demo':(state.db||'-'));
+function readJson(k){ try{ const o=JSON.parse(lsGet(k)||'null'); return o&&typeof o==='object'?o:null; }catch{ return null; } }
+function applyOpt(o,s){
+  if(!s) return false;
+  if([10,20,30,60].includes(s.every)) o.every=s.every;
+  if(['wait','station','sex'].includes(s.color)) o.color=s.color;
+  if(s.y>0) o.y=+s.y; if(s.r>0) o.r=+s.r;
+  if(['avg','max'].includes(s.stBy)) o.stBy=s.stBy;
+  if(typeof s.chairCol==='boolean') o.chairCol=s.chairCol;   // ชื่อเดิม zone (ค่าเริ่มต้นเคยเป็นเปิด) ไม่อ่านแล้ว → เก้าอี้ฟ้า
+  if(typeof s.busy5==='boolean') o.busy5=s.busy5;
+  if(typeof s.staff==='boolean') o.staff=s.staff;
+  if(s.map&&typeof s.map==='object') o.map=s.map;
+  const v=s.view||{};
+  if(['all','opd','er'].includes(v.type)) o.view.type=v.type;
+  if(Array.isArray(v.main)) o.view.main=v.main.map(str);
+  if(Array.isArray(v.cur)) o.view.cur=v.cur.map(str);
+  const st=s.st||{};
+  if(st.b&&typeof st.b==='object') o.st.b=st.b;
+  if(Array.isArray(st.c)) o.st.c=st.c.filter(c=>c&&Number.isFinite(+c.id)).map(c=>({id:+c.id,name:str(c.name),color:str(c.color)||'#139fc4',x:+c.x,z:+c.z,th:goodTh(c.th)}));
+  return true;
+}
 function loadOpt(){
   const o=defOpt();
-  try{
-    const s=JSON.parse(lsGet(LS_OPT+state.db)||'null');
-    if(s&&typeof s==='object'){
-      if([10,20,30,60].includes(s.every)) o.every=s.every;
-      if(['wait','station','sex'].includes(s.color)) o.color=s.color;
-      if(s.y>0) o.y=+s.y; if(s.r>0) o.r=+s.r;
-      if(['avg','max'].includes(s.stBy)) o.stBy=s.stBy;
-      if(typeof s.chairCol==='boolean') o.chairCol=s.chairCol;   // ชื่อเดิม zone (ค่าเริ่มต้นเคยเป็นเปิด) ไม่อ่านแล้ว → เก้าอี้ฟ้า
-      if(typeof s.busy5==='boolean') o.busy5=s.busy5;
-      if(typeof s.staff==='boolean') o.staff=s.staff;
-      if(s.map&&typeof s.map==='object') o.map=s.map;
-      const v=s.view||{};
-      if(['all','opd','er'].includes(v.type)) o.view.type=v.type;
-      if(Array.isArray(v.main)) o.view.main=v.main.map(str);
-      if(Array.isArray(v.cur)) o.view.cur=v.cur.map(str);
-      const st=s.st||{};
-      if(st.b&&typeof st.b==='object') o.st.b=st.b;
-      if(Array.isArray(st.c)) o.st.c=st.c.filter(c=>c&&Number.isFinite(+c.id)).map(c=>({id:+c.id,name:str(c.name),color:str(c.color)||'#139fc4',x:+c.x,z:+c.z,th:goodTh(c.th)}));
-    }
-  }catch{}
+  applyOpt(o,readJson(LS_PREF));                                           // ค่าที่ตั้งไว้ล่าสุด (ใช้ได้ทุกฐาน)
+  applyOpt(o,readJson(optKey()));                                          // ค่าของฐานนี้เอง (ทับค่าข้างบนถ้าเคยบันทึกไว้)
   state.opt=o; applyStations(); syncViewUI();
 }
-function saveOpt(){ if(!state.demo) lsSet(LS_OPT+state.db,JSON.stringify(state.opt)); }
+function saveOpt(){
+  const o=state.opt, pref={};
+  for(const k of PREF_KEYS) pref[k]=o[k];
+  lsSet(LS_PREF,JSON.stringify(pref));
+  lsSet(optKey(),JSON.stringify(o));
+}
 
 /* ---- SQL ---- */
 function visitSql(day,cur){
@@ -2365,7 +2377,8 @@ function demoTick(){
 }
 function startDemo(){
   resetAll(); state.demo=true; state.conn=null; state.db='demo'; state.user={};
-  state.opt=defOpt(); state.opt.every=10; applyStations(); syncViewUI();
+  const firstRun=!lsGet(LS_PREF);
+  loadOpt(); if(firstRun) state.opt.every=10;                             // ยังไม่เคยตั้งค่าเอง → โหมดจำลองขยับทุก 10 วิ
   $('hdrSub').textContent='ข้อมูลจำลอง — ไม่ได้เชื่อมต่อ HOSxP (คนไข้ขยับทุก 10 วินาที)';
   drawHospSign('โรงพยาบาล (ข้อมูลจำลอง)'); setLive('demo');
   demo.list=[]; load();
