@@ -685,10 +685,23 @@
       verifySid(sid);
     }
 
+    /* รับ session จาก URL ของหน้านี้ได้ด้วย เช่น
+         http://<เครื่อง>:8805/index.html?bms-session-id=XXXX-...
+       (ทำ shortcut ไว้ที่จอติดผนังได้เลย) อ่านแล้วลบออกจากแถบที่อยู่เหมือนที่แอปทำ */
+    function sidFromUrl() {
+      const q = new URLSearchParams(location.search);
+      const found = q.get(SID_PARAM) || q.get("sid") || q.get("bms_session_id") || "";
+      if (!found) return "";
+      [SID_PARAM, "sid", "bms_session_id"].forEach((k) => q.delete(k));
+      const rest = q.toString();
+      try { history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : "")); } catch {}
+      return found;
+    }
+
     renderApps();
     const initialHost = cleanHost(getStoredHost() || defaultHost);
     hostInput.value = initialHost;
-    applySid(readStored(SID_KEY));
+    applySid(sidFromUrl() || readStored(SID_KEY));
     updateUrls(initialHost);
     APPS.forEach((app) => checkApp(app, initialHost));
 
