@@ -61,6 +61,7 @@ body.replay #info{bottom:138px}
 #steps.min h2{margin:0}
 #info.min{width:auto;min-width:240px}
 .panel[hidden]{display:none}
+[hidden]{display:none!important}                                        /* กัน display ของคลาสทับแอตทริบิวต์ hidden */
 .minsum{display:none;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
 .tt .live,.tt .pctl{flex:none}
 .panel.min .tt h1{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -215,6 +216,7 @@ button.toggle[aria-pressed="true"]{background:#e2f5fb;border-color:var(--accent)
   <div id="stList"></div>
   <div class="legend" id="legend"></div>
   <a href="index.html" class="lnk">ดูแอนิเมชันขั้นตอนตัวอย่าง →</a>
+  <a href="#" class="lnk" id="homeLnk" hidden>☰ หน้ารวมแอปแสดงผล 3 มิติ</a>
   </div>
 </aside>
 
@@ -2580,6 +2582,24 @@ const tq=qs.get('tour');
 if(tq&&tq!=='0'){ if([5,8,12,20,30].includes(+tq)) lsSet('pj3d.tourSec',tq); setTimeout(()=>startTour(),1500); }
 const te=qs.get('tourEvery'); if(te!=null&&TOUR_EVERY.includes(+te)) lsSet('pj3d.tourEvery',String(+te));
 }
+</script>
+<script>
+/* ลิงก์กลับหน้ารวมแอปแสดงผล 3 มิติ (BMS-3D-Home พอร์ต 8805 ของเครื่องเดียวกับที่เปิดหน้านี้)
+   โผล่ให้เห็นเฉพาะตอนที่เครื่องนั้นเปิดหน้ารวมไว้จริง จะได้ไม่มีลิงก์ตายค้างบนจอ */
+(function(){
+  var a=document.getElementById('homeLnk'), b=document.getElementById('homeBtn'), row=document.getElementById('homeRow');
+  if(!a&&!b) return;
+  var host=location.protocol==='file:'?'localhost':(location.hostname||'localhost');
+  var url='http://'+host+':8805/index.html';
+  if(a) a.href=url;
+  if(b) b.onclick=function(){ location.href=url; };
+  var done=function(){ if(a) a.hidden=false; if(b) b.hidden=false; if(row) row.hidden=false; };
+  try{
+    var c=new AbortController(), t=setTimeout(function(){ c.abort(); },2500);
+    fetch(url,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:c.signal})
+      .then(done).catch(function(){}).then(function(){ clearTimeout(t); });
+  }catch(e){}
+})();
 </script>
 </body>
 </html>

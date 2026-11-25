@@ -14,6 +14,7 @@
   --font:"Noto Sans Thai","Leelawadee UI","Leelawadee","Tahoma","Sarabun",system-ui,sans-serif;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}                                        /* กัน display ของคลาสทับแอตทริบิวต์ hidden */
 html,body{margin:0;height:100%;overflow:hidden;background:#cfe6f5;font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
 #scene{position:fixed;inset:0}
 #scene canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
@@ -115,6 +116,7 @@ label.speed{font-size:13px;color:var(--muted);display:flex;align-items:center;ga
     </label>
     <button id="followBtn" class="toggle" aria-pressed="true">ติดตามคนไข้</button>
     <button id="resetBtn">รีเซ็ตมุมมอง</button>
+    <button id="homeBtn" hidden title="ไปหน้ารวมแอปแสดงผล 3 มิติ">☰ หน้ารวมแอป</button>
     <button id="liveBtn" class="primary" onclick="location.href='live.html'" title="แสดงคนไข้จริงจาก HOSxP">● คนไข้จริง (Realtime)</button>
   </div>
 </header>
@@ -1047,6 +1049,24 @@ updatePatient(sample(tl),0);
 updateCamera(1);
 frame();
 }
+</script>
+<script>
+/* ลิงก์กลับหน้ารวมแอปแสดงผล 3 มิติ (BMS-3D-Home พอร์ต 8805 ของเครื่องเดียวกับที่เปิดหน้านี้)
+   โผล่ให้เห็นเฉพาะตอนที่เครื่องนั้นเปิดหน้ารวมไว้จริง จะได้ไม่มีลิงก์ตายค้างบนจอ */
+(function(){
+  var a=document.getElementById('homeLnk'), b=document.getElementById('homeBtn'), row=document.getElementById('homeRow');
+  if(!a&&!b) return;
+  var host=location.protocol==='file:'?'localhost':(location.hostname||'localhost');
+  var url='http://'+host+':8805/index.html';
+  if(a) a.href=url;
+  if(b) b.onclick=function(){ location.href=url; };
+  var done=function(){ if(a) a.hidden=false; if(b) b.hidden=false; if(row) row.hidden=false; };
+  try{
+    var c=new AbortController(), t=setTimeout(function(){ c.abort(); },2500);
+    fetch(url,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:c.signal})
+      .then(done).catch(function(){}).then(function(){ clearTimeout(t); });
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
