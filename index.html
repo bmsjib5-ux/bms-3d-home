@@ -465,7 +465,8 @@
 
     <footer>
       แอปทั้งหมดอ่านข้อมูลจาก HOSxP ผ่าน BMS Session แบบ <strong>อ่านอย่างเดียว</strong><br>
-      ต้องเปิดผ่าน start.bat ของแต่ละแอป ห้ามเปิดไฟล์ตรง ๆ เพราะ tunnel ไม่ตอบ CORS
+      <strong>start.bat เดียว</strong> ในโฟลเดอร์นี้เปิดทั้งหน้านี้และแอปทั้งสองบนพอร์ตเดียวกัน
+      ห้ามเปิดไฟล์ตรง ๆ เพราะ tunnel ไม่ตอบ CORS
     </footer>
   </main>
 
@@ -474,8 +475,7 @@
       {
         key: "patient-journey-3d",
         title: "คนไข้ผู้ป่วยนอก Realtime 3D",
-        port: "8803",
-        file: "live.html",
+        path: "patient-journey-3d/live.html",
         image: "assets/patient-journey-3d.jpg",
         alt: "ภาพแผนที่ 3 มิติของแผนกผู้ป่วยนอก",
         color: "#139fc4",
@@ -491,8 +491,7 @@
       {
         key: "lab-visit-3d",
         title: "ห้องเจาะเลือด 3 มิติ",
-        port: "8804",
-        file: "index.html",
+        path: "Lab-visit-3D/index.html",
         image: "assets/lab-visit-3d.jpg",
         alt: "ภาพห้องเจาะเลือด 3 มิติและคิวคนไข้",
         color: "#2f8fd6",
@@ -591,8 +590,12 @@
       }
     }
 
+    /* เซิร์ฟเวอร์ตัวเดียวพอร์ตเดียวเสิร์ฟทั้งหน้านี้และแอปทั้งสอง (ดูโฟลเดอร์ใน start.bat)
+       จึงสร้างลิงก์จากพอร์ตของหน้านี้เอง เปลี่ยนพอร์ตใน start.bat แล้วไม่ต้องมาแก้ที่นี่ */
+    const appPort = location.port || "8805";
+
     function appUrls(app, host) {
-      const live = `http://${host}:${app.port}/${app.file}`;
+      const live = `http://${host}:${appPort}/${app.path}`;
       return { live, demo: `${live}?demo=1` };
     }
 
@@ -614,7 +617,7 @@
       status.dataset.state = state;
       status.querySelector(".status-text").textContent = labels[state];
       help.textContent = state === "offline"
-        ? "ยังไม่ได้เปิด — ไปที่เครื่องนั้นแล้วดับเบิลคลิก start.bat ของแอป"
+        ? "ยังไม่ได้เปิด — ไปที่เครื่องนั้นแล้วดับเบิลคลิก start.bat ในโฟลเดอร์ BMS-3D-Home"
         : "";
     }
 

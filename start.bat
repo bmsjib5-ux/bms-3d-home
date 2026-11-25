@@ -1,9 +1,16 @@
 @echo off
 REM ==============================================================
-REM  BMS 3D Home - open the launcher page for the 3D apps
+REM  BMS 3D - start everything: the launcher page AND both 3D apps
+REM  on one port (this folder and the two app folders inside it).
 REM
 REM  Double-click this file. It serves this folder on PORT and opens
 REM  http://localhost:PORT/index.html in the browser.
+REM    /index.html                     launcher (choose an app)
+REM    /patient-journey-3d/live.html   outpatient realtime 3D
+REM    /Lab-visit-3D/index.html        blood-draw room 3D
+REM    /proxy?url=...                  HOSxP API proxy both apps use
+REM
+REM  Each app still has its own start.bat if you want to run only one.
 REM
 REM  Uses Python 3.7+ (serve.py) when it is installed, otherwise the
 REM  Windows PowerShell that ships with Windows 10/11 (serve.ps1).
@@ -20,10 +27,13 @@ set "PSOPEN=-Open"
 for %%a in (%*) do if /i "%%~a"=="--no-browser" (set "PYOPEN=" & set "PSOPEN=")
 
 echo ==============================================================
-echo   BMS 3D Home - port %PORT%
+echo   BMS 3D - launcher + both 3D apps on port %PORT%
 echo ==============================================================
 echo.
 echo   This PC  : http://localhost:%PORT%/index.html
+echo              http://localhost:%PORT%/patient-journey-3d/live.html
+echo              http://localhost:%PORT%/Lab-visit-3D/index.html
+
 echo   Other PCs on the network can open it too after you run
 echo   Enable-LAN.bat once on this PC.
 echo.
