@@ -9,7 +9,7 @@
 # needs no admin rights).
 #
 # Same job as serve.py:
-#   - serves index.html (the launcher), both app folders and /proxy from this folder
+#   - serves index.html (the launcher), the app folders and /proxy from this folder
 #   - forwards /proxy?url=<https://...hosxp.net/...> server-side and adds CORS
 #     headers, because the HOSxP tunnel sends no CORS headers to localhost pages
 #
@@ -227,7 +227,7 @@ if (-not $listener) {
 
 $url = "http://localhost:$Port/index.html"
 Write-Host '=============================================================='
-Write-Host '  BMS 3D - launcher + both 3D apps on one port (PowerShell)'
+Write-Host '  BMS 3D - launcher + all 3D apps on one port (PowerShell)'
 Write-Host "  This PC:    $url"
 if ($lan) {
     $ips = @(Get-LanAddresses)

@@ -108,6 +108,68 @@
 
     .session-panel { margin-bottom: 14px; }
 
+    /* แถบตั้งค่า: ปกติเห็นแค่สถานะ session กับปุ่มตั้งค่า ช่องกรอกซ่อนอยู่ข้างใน */
+    .settings-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+    }
+
+    .sid-chip {
+      display: inline-flex;
+      gap: 9px;
+      align-items: center;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 42px;
+      padding: 8px 15px;
+      color: var(--muted);
+      font: inherit;
+      font-size: .92rem;
+      font-weight: 800;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .sid-chip .chip-dot {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .sid-chip .chip-text {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .sid-chip[data-state="ok"] { color: var(--success); }
+    .sid-chip[data-state="ok"] .chip-dot { background: var(--success); }
+    .sid-chip[data-state="bad"] { color: var(--danger); }
+    .sid-chip[data-state="bad"] .chip-dot { background: var(--danger); }
+    .sid-chip[data-state="checking"] .chip-dot { background: var(--checking); }
+
+    .settings-toggle {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .settings-toggle svg {
+      width: 18px;
+      height: 18px;
+      flex: none;
+    }
+
+    .settings-panels[hidden] { display: none; }
+
     .sid-buttons {
       display: flex;
       gap: 8px;
@@ -175,7 +237,7 @@
 
     .apps-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 22px;
     }
 
@@ -268,11 +330,29 @@
       line-height: 1.58;
     }
 
+    /* คำอธิบายของแต่ละแอป: ซ่อนไว้ก่อน โผล่ทับบนภาพเมื่อชี้หรือโฟกัสที่การ์ด (ไม่ดันความสูงการ์ด) */
     .features {
-      margin: 0 0 18px;
+      position: absolute;
+      z-index: 3;
+      top: 14px;
+      right: 14px;
+      left: 14px;
+      margin: 0;
       padding: 15px 16px 15px 36px;
+      border: 1px solid var(--line);
       border-radius: 13px;
-      background: var(--soft);
+      background: var(--surface-solid);
+      box-shadow: 0 16px 36px rgba(35, 85, 116, .22);
+      opacity: 0;
+      transform: translateY(-7px);
+      pointer-events: none;                              /* ไม่บังการคลิกการ์ด */
+      transition: opacity 170ms ease, transform 170ms ease;
+    }
+
+    .app-card:hover .features,
+    .app-card:focus-within .features {
+      opacity: 1;
+      transform: none;
     }
 
     .features li {
@@ -282,6 +362,19 @@
     }
 
     .features li::marker { color: var(--card-color); }
+
+    /* จอสัมผัสไม่มีการชี้เมาส์ → แสดงคำอธิบายในการ์ดแบบเดิม */
+    @media (hover: none) {
+      .features {
+        position: static;
+        margin: 0 0 18px;
+        border-color: transparent;
+        background: var(--soft);
+        box-shadow: none;
+        opacity: 1;
+        transform: none;
+      }
+    }
 
     .status-row {
       position: relative;           /* อยู่เหนือพื้นที่คลิกของการ์ด ปุ่มตรวจใหม่จึงกดได้ตามปกติ */
@@ -413,6 +506,20 @@
       </div>
     </header>
 
+    <div class="settings-bar">
+      <button class="sid-chip" id="sid-chip" type="button" aria-controls="settings-panels">
+        <span class="chip-dot" aria-hidden="true"></span><span class="chip-text">ยังไม่ได้ใส่ session</span>
+      </button>
+      <button class="secondary-button settings-toggle" id="settings-toggle" type="button"
+              aria-controls="settings-panels" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M19.4 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-1-1.4 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.4-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 1 1.4 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z"/>
+        </svg>ตั้งค่า
+      </button>
+    </div>
+
+    <div class="settings-panels" id="settings-panels" hidden>
     <section class="host-panel session-panel" aria-labelledby="sid-title">
       <div class="field">
         <label id="sid-title" for="sid-input">BMS Session ID</label>
@@ -435,6 +542,7 @@
       </div>
       <button class="secondary-button" id="use-default" type="button">ใช้เครื่องนี้</button>
     </section>
+    </div>
 
     <section aria-label="รายการแอปแสดงผล 3 มิติ">
       <div class="apps-grid" id="apps-grid"></div>
@@ -442,7 +550,7 @@
 
     <footer>
       แอปทั้งหมดอ่านข้อมูลจาก HOSxP ผ่าน BMS Session แบบ <strong>อ่านอย่างเดียว</strong><br>
-      <strong>start.bat เดียว</strong> ในโฟลเดอร์นี้เปิดทั้งหน้านี้และแอปทั้งสองบนพอร์ตเดียวกัน
+      <strong>start.bat เดียว</strong> ในโฟลเดอร์นี้เปิดทั้งหน้านี้และแอปทุกตัวบนพอร์ตเดียวกัน
       ห้ามเปิดไฟล์ตรง ๆ เพราะ tunnel ไม่ตอบ CORS
     </footer>
   </main>
@@ -480,25 +588,68 @@
           "จอเรียกคิวในฉากตรงกับหน้าจอจริง"
         ],
         note: "ต้องมี BMS Session ของโรงพยาบาลตัวเอง"
+      },
+      {
+        key: "doctor-queue-3d",
+        title: "คิวห้องตรวจแพทย์ 3 มิติ",
+        path: "doctor-queue-3d/index.html",
+        image: "assets/doctor-queue-3d.jpg",
+        alt: "ภาพห้องตรวจแพทย์ 3 มิติพร้อมคิวคนไข้",
+        color: "#2a9d8f",
+        tagline: "ห้องตรวจแพทย์แบบ 3 มิติ เห็นคนรอซักประวัติ รอพบแพทย์ และคนที่อยู่ในห้องตรวจพร้อมเวลารอรายคน",
+        features: [
+          "เฉพาะคนที่ยังรออยู่จริง ตัดคนที่แผนกปิดงานแล้วออก (opd_dep_queue + ovstost)",
+          "เลขคิวจาก opd_qs_slot ตรงกับบัตรคิวจริง · แยกกลุ่มคนรอผลตรวจ",
+          "เวลารอเกิน 30 นาทีเป็นเหลือง เกิน 60 นาทีเป็นแดง (ปรับได้)",
+          "เลือกดูเฉพาะคลินิก / จุดซักประวัติ / ห้องตรวจที่สนใจ"
+        ],
+        note: "ต้องมี BMS Session ของโรงพยาบาลตัวเอง"
+      },
+      {
+        key: "er-triage-3d",
+        title: "ห้องฉุกเฉิน 3 มิติ",
+        path: "er-triage-3d/index.html",
+        image: "assets/er-triage-3d.jpg",
+        alt: "ภาพห้องฉุกเฉิน 3 มิติ คนไข้นอนเตียงตามสีคัดกรอง",
+        color: "#d64545",
+        tagline: "ห้องฉุกเฉินแบบ 3 มิติ คนไข้ที่อยู่ใน ER ตอนนี้นอนเตียงตามสีคัดกรอง แพทย์เดินไปข้างเตียงคนที่กำลังตรวจ",
+        features: [
+          "ผู้ป่วยจาก er_regist: รอคัดกรอง → รอพบแพทย์ → รักษา → รอขึ้นวอร์ด",
+          "5 สีตาม er_emergency_level · เวลาที่อยู่ใน ER เหนือหัวทุกคน",
+          "เตือนรอพบแพทย์เกินเป้าตามสี · ค่ากลางมาถึง→พบแพทย์ของวันนี้",
+          "อาการสำคัญ สัญญาณชีพ มาด้วยรถ EMS · ซ่อน HN ได้สำหรับจอสาธารณะ"
+        ],
+        note: "ต้องมี BMS Session ของโรงพยาบาลตัวเอง"
       }
     ];
 
     const STORAGE_KEY = "bms3d.host";
     const SID_KEY = "bms3d.sid";
-    const SID_PARAM = "bms-session-id";                 // ชื่อพารามิเตอร์ที่ทั้งสองแอปรับ
+    const SID_PARAM = "bms-session-id";                 // ชื่อพารามิเตอร์ที่ทุกแอปรับ
     const PASTEJSON_URL = "https://hosxp.net/phapi/PasteJSON";
-    const APP_SID_KEYS = ["pj3d.sid", "lab3d.sid"];     // ที่เก็บ session ของแต่ละแอป (ดู LS_SID ในแอป)
+    const APP_SID_KEYS = ["pj3d.sid", "lab3d.sid", "dq3d.sid", "er3d.sid"];     // ที่เก็บ session ของแต่ละแอป (ดู LS_SID ในแอป)
     const defaultHost = location.protocol === "file:" ? "localhost" : (location.hostname || "localhost");
     const hostInput = document.querySelector("#host-input");
     const sidInput = document.querySelector("#sid-input");
     const sidStatus = document.querySelector("#sid-status");
     const sidClear = document.querySelector("#sid-clear");
+    const sidChip = document.querySelector("#sid-chip");
+    const settingsToggle = document.querySelector("#settings-toggle");
+    const settingsPanels = document.querySelector("#settings-panels");
     const appsGrid = document.querySelector("#apps-grid");
     const activeChecks = new Map();
     let changeTimer;
     let sid = "";
 
     function appIcon(key) {
+      if (key === "er-triage-3d") {
+        return `<svg class="app-icon" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M5 33V19h22l6 7h8c1.7 0 3 1.3 3 3v4H5Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+          <circle cx="14" cy="35" r="4" fill="currentColor"/><circle cx="35" cy="35" r="4" fill="currentColor"/>
+          <path d="M16 22v8m-4-4h8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <path d="M20 12h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        </svg>`;
+      }
       if (key === "lab-visit-3d") {
         return `<svg class="app-icon" viewBox="0 0 48 48" aria-hidden="true">
           <path d="M18 5h12v5l-2 3v7l9 14c2 4-1 9-6 9H17c-5 0-8-5-6-9l9-14v-7l-2-3V5Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
@@ -566,7 +717,7 @@
       }
     }
 
-    /* เซิร์ฟเวอร์ตัวเดียวพอร์ตเดียวเสิร์ฟทั้งหน้านี้และแอปทั้งสอง (ดูโฟลเดอร์ใน start.bat)
+    /* เซิร์ฟเวอร์ตัวเดียวพอร์ตเดียวเสิร์ฟทั้งหน้านี้และแอปทุกตัว (ดูโฟลเดอร์ใน start.bat)
        จึงสร้างลิงก์จากพอร์ตของหน้านี้เอง เปลี่ยนพอร์ตใน start.bat แล้วไม่ต้องมาแก้ที่นี่ */
     const appPort = location.port || "8805";
 
@@ -626,6 +777,7 @@
     function applyHost(rawHost) {
       const host = cleanHost(rawHost);
       hostInput.value = host;
+      updateChip();
       saveHost(host);
       updateUrls(host);
       APPS.forEach((app) => checkApp(app, host));
@@ -642,9 +794,34 @@
       try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
     }
 
+    let sidState = "";
+    let sidText = "";
+
     function setSidStatus(state, text) {
-      sidStatus.dataset.state = state || "";
+      sidState = state || "";
+      sidText = text;
+      sidStatus.dataset.state = sidState;
       sidStatus.textContent = text;
+      updateChip();
+    }
+
+    /* ป้ายสรุปบนแถบตั้งค่า: เห็นสถานะ session และเครื่องที่เปิดแอปได้โดยไม่ต้องกางกล่องตั้งค่า */
+    function updateChip() {
+      const host = cleanHost(hostInput.value || defaultHost);
+      const hostPart = host === defaultHost ? "" : ` · เครื่อง ${host}`;
+      const label = sidState === "ok" ? sidText.replace(/^ใช้ได้ · /, "").replace(/ — .*$/, "")
+        : sidState === "checking" ? "กำลังตรวจ session…"
+        : sidState === "bad" ? "session ใช้ไม่ได้ — กดตั้งค่าเพื่อวางใหม่"
+        : "ยังไม่ได้ใส่ session";
+      sidChip.dataset.state = sidState;
+      sidChip.querySelector(".chip-text").textContent = label + hostPart;
+      sidChip.title = sidText || label;
+    }
+
+    function setSettingsOpen(open, focusField) {
+      settingsPanels.hidden = !open;
+      settingsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open && focusField) setTimeout(() => sidInput.focus(), 30);
     }
 
     function shareSid(value) {
@@ -669,9 +846,11 @@
           setSidStatus("ok", `ใช้ได้ · ${name}${db} — เปิดแอปแล้วต่อให้เลย`);
         } else {
           setSidStatus("bad", `session นี้ใช้ไม่ได้: ${(data && data.Message) || "ไม่ทราบสาเหตุ"}`);
+          setSettingsOpen(true);                      // ใช้ไม่ได้ = ต้องวางใหม่ กางกล่องให้เลย
         }
       } catch {
         setSidStatus("bad", "ตรวจสอบไม่ได้ — หน้านี้ต้องเปิดผ่าน start.bat เพราะต้องใช้ /proxy ของเซิร์ฟเวอร์");
+        setSettingsOpen(true);
       }
     }
 
@@ -702,6 +881,7 @@
     const initialHost = cleanHost(getStoredHost() || defaultHost);
     hostInput.value = initialHost;
     applySid(sidFromUrl() || readStored(SID_KEY));
+    if (!sid) setSettingsOpen(true);                   // ยังไม่เคยใส่ session → กางกล่องให้ใส่ได้เลย
     updateUrls(initialHost);
     APPS.forEach((app) => checkApp(app, initialHost));
 
@@ -716,6 +896,9 @@
     });
 
     document.querySelector("#use-default").addEventListener("click", () => applyHost(defaultHost));
+
+    settingsToggle.addEventListener("click", () => setSettingsOpen(settingsPanels.hidden, true));
+    sidChip.addEventListener("click", () => setSettingsOpen(true, true));
 
     document.querySelector("#sid-connect").addEventListener("click", () => applySid(sidInput.value));
     sidClear.addEventListener("click", () => applySid(""));

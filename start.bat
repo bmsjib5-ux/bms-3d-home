@@ -1,6 +1,6 @@
 @echo off
 REM ==============================================================
-REM  BMS 3D - start everything: the launcher page AND both 3D apps
+REM  BMS 3D - start everything: the launcher page AND all 3D apps
 REM  on one port (this folder and the two app folders inside it).
 REM
 REM  Double-click this file. It serves this folder on PORT and opens
@@ -8,7 +8,9 @@ REM  http://localhost:PORT/index.html in the browser.
 REM    /index.html                     launcher (choose an app)
 REM    /patient-journey-3d/live.html   outpatient realtime 3D
 REM    /Lab-visit-3D/index.html        blood-draw room 3D
-REM    /proxy?url=...                  HOSxP API proxy both apps use
+REM    /doctor-queue-3d/index.html     doctor exam-room queue 3D
+REM    /er-triage-3d/index.html        emergency room (ER) 3D
+REM    /proxy?url=...                  HOSxP API proxy the apps use
 REM
 REM  Each app still has its own start.bat if you want to run only one.
 REM
@@ -27,12 +29,14 @@ set "PSOPEN=-Open"
 for %%a in (%*) do if /i "%%~a"=="--no-browser" (set "PYOPEN=" & set "PSOPEN=")
 
 echo ==============================================================
-echo   BMS 3D - launcher + both 3D apps on port %PORT%
+echo   BMS 3D - launcher + all 3D apps on port %PORT%
 echo ==============================================================
 echo.
 echo   This PC  : http://localhost:%PORT%/index.html
 echo              http://localhost:%PORT%/patient-journey-3d/live.html
 echo              http://localhost:%PORT%/Lab-visit-3D/index.html
+echo              http://localhost:%PORT%/doctor-queue-3d/index.html
+echo              http://localhost:%PORT%/er-triage-3d/index.html
 
 echo   Other PCs on the network can open it too after you run
 echo   Enable-LAN.bat once on this PC.

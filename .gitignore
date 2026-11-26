@@ -1,7 +1,9 @@
-# โฟลเดอร์ของแอปทั้งสองวางไว้ในนี้เพื่อให้อยู่ที่เดียวกัน แต่แต่ละตัวเป็น git repo ของตัวเอง
+# โฟลเดอร์ของแอปแต่ละตัววางไว้ในนี้เพื่อให้อยู่ที่เดียวกัน แต่เป็นของใครของมัน
 # (patient-journey-3d → github.com/bmsjib5-ux/patient-journey-3d) จึงไม่เอาเข้า repo ของหน้า home
 patient-journey-3d/
 Lab-visit-3D/
+doctor-queue-3d/
+er-triage-3d/
 
 # เครื่องมือ/ขยะของเครื่อง
 .claude/

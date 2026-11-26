@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Local server for the whole BMS 3D set: the launcher page and both 3D apps
+# Local server for the whole BMS 3D set: the launcher page and the 3D apps
 # on ONE port, plus the CORS proxy for the BMS-Session HOSxP API.
 #
 #   /index.html                        the launcher (choose an app)
 #   /patient-journey-3d/live.html      outpatient realtime 3D
 #   /Lab-visit-3D/index.html           blood-draw room 3D
-#   /proxy?url=...                     HOSxP API proxy used by both apps
+#   /doctor-queue-3d/index.html        doctor exam-room queue 3D
+#   /er-triage-3d/index.html           emergency room (ER) 3D
+#   /proxy?url=...                     HOSxP API proxy used by the apps
 #
 # Why this exists:
 #   The HOSxP tunnel (*.tunnel.hosxp.net) does NOT send CORS headers on /api/sql,
@@ -275,12 +277,14 @@ if __name__ == '__main__':
         print('Then it is already working - just open %s' % url)
         leave(1)
     print('=' * 62)
-    print('  BMS 3D - launcher + both 3D apps on one port (Python)')
+    print('  BMS 3D - launcher + all 3D apps on one port (Python)')
     print('  This PC:    ' + url)
     for ip in lan_addresses():
         print('  Other PCs:  http://%s:%d/index.html' % (ip, PORT))
     print('  Apps:       %spatient-journey-3d/live.html' % url[:-10])
     print('              %sLab-visit-3D/index.html' % url[:-10])
+    print('              %sdoctor-queue-3d/index.html' % url[:-10])
+    print('              %ser-triage-3d/index.html' % url[:-10])
     print('  (other PCs cannot connect? run Enable-LAN.bat once to open the firewall)')
     if CACHE_SEC > 0:
         print('  SQL cache: screens share each answer for %g s  (stats: /cache-stats)' % CACHE_SEC)
