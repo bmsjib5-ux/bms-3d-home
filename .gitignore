@@ -10,3 +10,6 @@ __pycache__/
 *.rar
 Thumbs.db
 desktop.ini
+
+# รายการไฟล์ของตัวอัปเดตเครื่องจอ สร้างใหม่ด้วย python update/make-manifest.py
+update/manifest.json

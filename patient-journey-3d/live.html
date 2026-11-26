@@ -103,6 +103,11 @@ button.toggle[aria-pressed="true"]{background:#e2f5fb;border-color:var(--accent)
 .st.l1{background:#fff6df;border-left:4px solid var(--warn)} .st.l2{background:#fdecec;border-left:4px solid var(--bad)}
 .st .wy{color:#a86a00;font-weight:600} .st .wr{color:#c62828;font-weight:600}
 .st .th{font-size:10.5px;color:#7b8f9f} .st .th i{display:inline-block;width:7px;height:7px;border-radius:50%;margin:0 2px 0 3px;vertical-align:0}
+/* โต๊ะย่อย (ซักประวัติ/ห้องตรวจแยกตาม login) ใต้จุดหลัก */
+.st.sub{margin-left:20px;padding:3px 8px;gap:8px}
+.st.sub .num{width:30px;height:20px;border-radius:10px;font-size:10.5px;opacity:.9}
+.st.sub .txt{font-size:12px;font-weight:600} .st.sub .txt small{font-size:10.5px}
+.st.sub .cnt{font-size:15px;min-width:30px}
 .thin{width:56px;min-height:30px;font-size:12.5px;padding:2px 4px}
 .legend{font-size:11.5px;color:var(--muted);margin:10px 6px 2px;line-height:1.6}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:3px}
@@ -287,6 +292,9 @@ button.toggle[aria-pressed="true"]{background:#e2f5fb;border-color:var(--accent)
     <div class="row" style="margin-top:6px"><button type="button" id="stAdd">+ เพิ่มจุดบริการ</button></div>
     <label><input type="checkbox" id="optStaff"> แสดงจำนวนเจ้าหน้าที่ที่ login HOSxP อยู่ในแต่ละจุด (แพทย์ · พยาบาล · ห้องยา · การเงิน) <small class="note">— จาก doctor_online ที่ใช้งานภายใน 15 นาที</small></label>
     <label><input type="checkbox" id="optBusy"> คนไข้ที่ HOSxP บอกว่า "กำลังรับบริการ" (cur_dep_busy) ในคลินิก → แสดงที่ห้องตรวจแพทย์</label>
+    <label><input type="checkbox" id="optDeskTri"> แยกโต๊ะซักประวัติตามจุดซักประวัติที่มีเจ้าหน้าที่ login อยู่ <small class="note">— ถ้ากรองห้องไว้ ใช้จุดซักประวัติที่กรองแทน · แต่ละโต๊ะมีแถวรอของตัวเอง</small></label>
+    <label><input type="checkbox" id="optDeskExam"> แยกโต๊ะห้องตรวจตามห้องตรวจที่แพทย์ login อยู่ <small class="note">— ถ้ากรองห้องไว้ ใช้ห้องตรวจที่กรองแทน</small></label>
+    <label>ช่องจ่ายยา <input type="number" id="optPhWin" min="1" max="12" style="width:70px"> ช่อง <small class="note">— 1–12 ช่อง · คนที่รอนานสุดยืนหน้าช่อง</small></label>
     <label>แผนก HOSxP → จุดบนแผนที่ <small class="note">(ค่าอัตโนมัติเดาจากชื่อแผนก)</small></label>
     <div class="note" id="mapNote"></div>
     <table class="maptbl"><tbody id="mapBody"></tbody></table>
@@ -576,7 +584,9 @@ for(const s of ST){
 const viaFor=(s,z)=>s?s.via.filter(p=>z<WALLZ||p[1]>WALLZ):[];
 /* จุดบริการ: ในตัว (มีเฟอร์นิเจอร์ — เปลี่ยนชื่อ/สี/ซ่อนได้) + จุดที่ผู้ใช้เพิ่มเอง (คลิกวางบนแผนที่) เก็บใน opt.st */
 const BUILTIN=ST.slice();
-BUILTIN.forEach(s=>{ s.builtin=true; s.defName=s.name; s.defColor=s.color; s.defTh=s.th||null; });
+BUILTIN.forEach(s=>{ s.builtin=true; s.defName=s.name; s.defColor=s.color; s.defTh=s.th||null; s.defRects=s.rects.slice(); s.defSeats=s.seats.slice(); });
+/* โต๊ะย่อยที่สร้างจากข้อมูลจริง (buildDesks): โต๊ะซักประวัติ / โต๊ะแพทย์ แยกตามแผนกที่มีคน login (หรือที่กรองไว้) */
+let DESKS=[];
 const byId={};
 /* done = เวลาที่คนไข้ใช้ที่จุดนี้จนย้ายออก (เห็นตั้งแต่เปิดหน้า) · nY/nR = จำนวนคนที่รอถึงเกณฑ์เหลือง/แดง */
 function initStation(s){ s.members=[]; s.count=0; s.over=0; s.max=0; s.avg=0; s.lvl=0; s.nY=0; s.nR=0; s.done=s.done||[]; s.labelKey=''; s.shown=false; }
@@ -633,6 +643,13 @@ function makePerson(o){
 function place(p,x,z,yaw){ p.root.position.set(SX(x),0,SZ(z)); p.root.rotation.y=yaw; world.add(p.root); return p; }
 const staff=[];
 function npc(stId,o,x,z,yaw){ const p=place(makePerson(o),x,z,yaw); p.st=stId; staff.push(p); return p; }
+/* เก็บเฟอร์นิเจอร์ที่สร้างใน fn ไว้เป็นกลุ่มแยก (userData.dyn = ไม่ถูกรวมเป็นเมชนิ่ง) → ซ่อน/ย้ายได้ภายหลัง
+   ใช้กับเคาน์เตอร์ซักประวัติ โต๊ะห้องตรวจ และเคาน์เตอร์ห้องยา ซึ่งถูกแทนด้วยโต๊ะ/ช่องจ่ายยาตามข้อมูลจริง */
+function grab(fn){
+  const n0=world.children.length; fn();
+  const g=new THREE.Group(); g.userData.dyn=true;
+  world.children.slice(n0).forEach(c=>g.add(c)); world.add(g); return g;
+}
 
 const SC=id=>byId[id].color;
 /* ER ที่ทางเข้า (ฝั่งซ้าย): เตียง 3 เตียงชิดผนัง + เคาน์เตอร์พยาบาลหน้าทางเข้า */
@@ -678,8 +695,8 @@ box(world,0.5,0.32,0.06,darkM,-7.8,1.01,10.6,0,false); box(world,0.5,0.32,0.06,d
 npc(2,{shirt:'#f6b26b',pants:'#3b3b4f',hair:'#241a14'},-7.8,11.2,Math.PI);
 npc(2,{shirt:'#f6b26b',pants:'#3b3b4f',hair:'#1d1714'},-6.2,11.2,Math.PI);
 });
-/* ซักประวัติ: เคาน์เตอร์พยาบาลหน้าห้องตรวจ หันเข้าหาโถงรอ */
-at(0,2.1,()=>{
+/* ซักประวัติ: เคาน์เตอร์พยาบาลหน้าห้องตรวจ หันเข้าหาโถงรอ (ซ่อนเมื่อแยกโต๊ะตามจุดที่ login — buildDesks) */
+const triFurn=grab(()=>at(0,2.1,()=>{
 box(world,4.4,1.0,0.8,mat('#f5f1e6'),0,0,1.0);
 box(world,4.5,0.06,0.9,mat(SC(3),{roughness:.5}),0,1.0,1.0);
 box(world,0.5,0.32,0.06,darkM,-1.0,1.06,0.75,0,false); box(world,0.5,0.32,0.06,darkM,1.0,1.06,0.75,0,false);
@@ -687,7 +704,7 @@ npc(3,{shirt:'#7cc6d8',pants:'#7cc6d8',cap:true,hair:'#2b1d16'},-1.0,0.1,0);
 npc(3,{shirt:'#7cc6d8',pants:'#7cc6d8',cap:true,hair:'#1d1714'},1.0,0.1,0);
 box(world,0.08,2.8,0.08,frameM,-2.3,0,1.45); box(world,0.08,2.8,0.08,frameM,2.3,0,1.45);
 signBox(world,'ซักประวัติ · หน้าห้องตรวจ',SC(3),'#fff',4.6,0.62,0,2.85,1.45);
-});
+}));
 /* กระดานรวมคนไข้ใน รพ. (อัปเดตตามข้อมูลจริง) */
 const boardMat=new THREE.MeshBasicMaterial({toneMapped:false});
 function drawBoard(n){
@@ -700,10 +717,11 @@ function drawBoard(n){
   boardMat.needsUpdate=true; if(old) old.dispose();
 }
 drawBoard(null);
-at(0,2.1,()=>{
+/* กระดานตั้งอยู่แนวเดียวกับโต๊ะซักประวัติ → ย้ายไปปลายแถวเมื่อแยกโต๊ะ (buildDesks) */
+const boardFurn=grab(()=>at(0,2.1,()=>{
 cyl(world,0.06,1.8,frameM,4.4,0,1.2);
 { const qb=new THREE.Mesh(BOX,boardMat); qb.scale.set(1.8,0.9,0.08); qb.position.set(SX(4.4),2.15,SZ(1.2)); world.add(qb); }
-});
+}));
 /* ห้องแล็บ (ซ้ายสุด) */
 door(-19.75,-4.5,SC(4),'ห้องแล็บ');
 at(-19.75,-9.2,()=>{
@@ -745,6 +763,8 @@ npc(10,{shirt:'#9db4e8',pants:'#9db4e8',hair:'#2a211c'},-14.0,-12.6,Math.PI/2);
 });
 /* ห้องตรวจแพทย์ */
 door(0,-4.5,SC(5),'ห้องตรวจแพทย์');
+/* โต๊ะแพทย์ เตียงตรวจ ม่าน (ซ่อนเมื่อแยกโต๊ะตามห้องตรวจที่แพทย์ login — buildDesks) */
+const examFurn=grab(()=>{
 at(0,-9.1,()=>{
 box(world,2.2,0.76,1.0,woodM,0,0,-10.6);
 box(world,0.7,0.45,0.06,darkM,0.55,0.95,-10.85,-0.3);
@@ -762,15 +782,18 @@ box(world,0.05,1.9,2.6,mat('#a9dcc4',{roughness:.9}),3.2,0.2,-11.9);
 box(world,0.06,0.06,2.8,frameM,3.2,2.15,-11.9,0,false);
 });
 plant(-5.8,-15);
+});
 /* ห้องยา (ครึ่งซ้ายของห้องยาเดิม) */
 door(11.25,-4.5,SC(6),'ห้องยา — รับยา');
-at(11.25,-9.2,()=>{
+/* เคาน์เตอร์เดิม 1 ช่อง → ถูกแทนด้วยช่องจ่ายยา N ช่อง (ตั้งได้ ค่าเริ่มต้น 5) ใน buildDesks */
+const phFurn=grab(()=>at(11.25,-9.2,()=>{
 box(world,5,1.02,0.8,mat('#e3f4ea'),11.25,0,-10.5);
 box(world,5.1,0.06,0.9,mat(SC(6),{roughness:.5}),11.25,1.02,-10.5);
 box(world,5,0.62,0.05,glassM,11.25,1.08,-10.62,0,false);
 box(world,0.35,0.22,0.25,mat('#ffffff'),10.55,1.08,-10.3,0,false);
 npc(6,{shirt:'#fbfbfb',pants:'#2f8f6a',coat:true,hair:'#1e1813'},11.25,-11.7,0);
-});
+}));
+phFurn.visible=false;
 at(11.25,-16,()=>{
 box(world,7.8,2.3,0.12,mat('#e9e3d6'),11.25,0,-15.75);
 for(let r=0;r<4;r++) box(world,7.8,0.05,0.6,mat('#d9d0bd'),11.25,0.3+r*0.52,-15.45,0,false);
@@ -889,6 +912,150 @@ function mergeStatic(root){
 }
 const MERGED=mergeStatic(world);
 
+/* ================================================================ โต๊ะแยกตามจุดที่ login + ช่องจ่ายยา (ผู้ใช้กำหนด 26/11/2569)
+   ซักประวัติ: 1 โต๊ะต่อ 1 จุดซักประวัติที่มีเจ้าหน้าที่ login อยู่ (หรือที่กรองห้องไว้) เรียงแถวตรงแนวเคาน์เตอร์เดิม
+     แต่ละโต๊ะมีแถวเก้าอี้รอของตัวเองด้านหลัง · แถบในสุดของโถง = ที่รอรวมของจุดหลัก (หลังพบแพทย์ / จุดที่ไม่มีใคร login)
+   ห้องตรวจ: 1 โต๊ะแพทย์ต่อ 1 ห้องตรวจที่แพทย์ login อยู่ (หรือที่กรองไว้) จัดเป็นตารางในห้องตรวจ เว้นทางเดินกลางจากประตู
+     ห้องตรวจที่ไม่มีโต๊ะ = ยืนรอหน้าประตูด้านใน (ที่รอรวมของจุดหลัก)
+   ห้องยา: ช่องจ่ายยา N ช่อง (ตั้งค่าได้ 1–12 ค่าเริ่มต้น 5) · คนที่รอนานสุด N คนยืนหน้าช่อง ที่เหลือนั่งรอ
+   ทุกอย่างอยู่ใน deskLayer (userData.dyn) สร้างใหม่เมื่อชุดโต๊ะเปลี่ยนเท่านั้น (deskKey) */
+const deskLayer=new THREE.Group(); deskLayer.userData.dyn=true; world.add(deskLayer);
+const TRI_X=[-13.8*S,11.8*S], TRI_ROW_Z=2.1*S-1.1, TRI_LANE_MIN=1.2;   // แนวโต๊ะ = แนวเคาน์เตอร์ซักประวัติเดิม
+const TRI_HALL=[[TRI_X[0],TRI_X[1],2.3*S,6.6*S],[-3*S,11.8*S,6.6*S,9.8*S],[-13.8*S,-11.2*S,6.6*S,11.4*S]];
+const TRI_BACK=[[-3*S,15*S,10.4*S,13.2*S]];
+const EXAM_BOX=[-7*S+0.7,7*S-0.7,BZ0+0.7,WALLZ-0.8], EXAM_AISLE=1.15, EXAM_CW=2.4, EXAM_CH=1.95, EXAM_FRONT=2.0;
+const PH_C=[11.25*S,-9.2*S-1.3], PH_ROOM=(15.5-7)*S-1.2;               // กลางเคาน์เตอร์ห้องยาเดิม · ความกว้างห้อง
+const RE_TRI=/ซักประวัติ|คัดกรอง|screen|triage|จุดแรกรับ/i, RE_POST=/หลังพบแพทย์|หลังตรวจ/;
+let deskKey='', deskByDep=new Map();
+const topMats=new Map(), deskTop=c=>{ if(!topMats.has(c)) topMats.set(c,mat(c,{roughness:.5})); return topMats.get(c); };
+const SHARED_M=new Set([deskM,woodM,darkM,frameM,glassM,seatM]);
+function isTriDep(cd){ const n=(state.dep&&state.dep.get(cd))||''; return RE_TRI.test(n)&&!RE_POST.test(n); }
+function shortDep(cd){
+  const n=str(state.dep.get(cd))||('แผนก '+cd);
+  return n.replace(/^\s*\d+\s*/,'').replace(/^(จุด)?ซักประวัติ\s*/,'').replace(/^ห้องตรวจ\s*/,'').trim()||n;
+}
+const triCap=()=>Math.max(1,Math.floor((TRI_X[1]-TRI_X[0])/TRI_LANE_MIN));
+function examGrid(){
+  const [x0,x1,z0,z1]=EXAM_BOX, bw=(x1-x0)/2-EXAM_AISLE, half=Math.max(1,Math.floor(bw/EXAM_CW));
+  const rows=Math.max(1,Math.floor((z1-EXAM_FRONT-z0)/EXAM_CH));
+  return {half,cols:half*2,rows,cap:half*2*rows,bw};
+}
+/* ที่รอรวมของห้องตรวจเมื่อแยกโต๊ะ: หน้าประตูด้านใน + แนวหน้าผนังห้องตรวจด้านนอก (ระหว่างผนังกับทางเดินหลัก) */
+function examFront(){
+  const [x0,x1,,z1]=EXAM_BOX, oz0=WALLZ+0.75, oz1=CZ-0.75;
+  const r=[[x0+0.3,-EXAM_AISLE,z1-1.8,z1],[EXAM_AISLE,x1-0.3,z1-1.8,z1]];
+  if(oz1-oz0>=0.5) r.push([-7*S+0.5,-1.6,oz0,oz1],[1.6,7*S-0.5,oz0,oz1]);
+  return r;
+}
+/* พื้นที่รอของจุดหลักเมื่อมีโต๊ะย่อย: ซักประวัติเหลือแถบในสุดของโถง · ห้องตรวจเหลือหน้าประตูด้านใน */
+function applyDeskArea(s){
+  const on=!!(s.kids&&s.kids.length);
+  if(s.id===3) s.rects=on?TRI_BACK.map(r=>r.slice()):s.defRects.slice();
+  else if(s.id===5){ s.rects=on?examFront():s.defRects.slice(); s.seats=on?[]:s.defSeats.slice(); }
+}
+/* ชุดแผนกที่ควรมีโต๊ะ: กรองห้องไว้ → ตามที่กรอง · ไม่กรอง → แผนกที่มีคน login อยู่ (ไม่มีข้อมูล login → แผนกที่มีคนไข้)
+   โต๊ะที่ยังมีคนไข้รออยู่ไม่หายไปแค่เพราะ login หลุดช่วงสั้น ๆ · เกินที่วางได้ → เลือกแผนกที่มีคนไข้มากก่อน */
+function deskWanted(){
+  const o=state.opt, fCur=new Set(o.view.cur), out={3:[],5:[]};
+  const logged=new Set((state.staffRaw||[]).filter(x=>x.n>0).map(x=>x.dep)), useLogin=state.staffOk&&!state.rp;
+  const pts=new Map();
+  for(const r of state.rows){ if(str(val(r,'an'))) continue; const cd=str(val(r,'cd')); pts.set(cd,(pts.get(cd)||0)+1); }
+  for(const [pid,on,cap,pred] of [[3,o.deskTri,triCap(),isTriDep],[5,o.deskExam,examGrid().cap,()=>true]]){
+    const P=BUILTIN.find(s=>s.id===pid);
+    if(!on||!P||P.off) continue;
+    const cands=[...state.dep.keys()].filter(cd=>cd&&stationOfDep(cd)===pid&&pred(cd));
+    const fl=cands.filter(cd=>fCur.has(cd));
+    let set=fl.length?fl:cands.filter(cd=>useLogin?logged.has(cd):pts.has(cd));
+    if(!fl.length) for(const d of (state.deskPrev&&state.deskPrev[pid])||[]) if(!set.includes(d)&&pts.has(d)&&cands.includes(d)) set.push(d);
+    set.sort((a,b)=>(pts.get(b)||0)-(pts.get(a)||0)||a.localeCompare(b));
+    out[pid]=set.slice(0,cap).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  }
+  return out;
+}
+function dBox(w,h,d,m,x,y,z,ry=0,cast=true,par=deskLayer){ const o=new THREE.Mesh(BOX,m); o.scale.set(w,h,d); o.position.set(x,y+h/2,z); o.rotation.y=ry; o.castShadow=cast; o.receiveShadow=true; par.add(o); return o; }
+function dChair(x,z,ry){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; deskLayer.add(g);
+  dBox(0.62,0.08,0.6,seatM,0,0.39,0,0,true,g); dBox(0.62,0.62,0.07,seatM,0,0.47,-0.28,0,true,g);
+  dBox(0.06,0.39,0.5,frameM,0.26,0,0,0,true,g); dBox(0.06,0.39,0.5,frameM,-0.26,0,0,0,true,g);
+}
+function dPerson(o,x,z,yaw){ const p=makePerson(o); p.root.position.set(x,0,z); p.root.rotation.y=yaw; deskLayer.add(p.root); return p; }
+const HAIRS=['#2a211c','#1d1714','#3a2a1e','#241a14','#2b1d16'];
+function mkDesk(cd,P,pos,via,rects,seats){
+  const s={id:10000+(/^\d+$/.test(cd)?parseInt(cd,10):hashStr(cd)%9000),desk:true,parent:P.id,dep:cd,code:cd,name:shortDep(cd),
+    sub:(P.id===3?'จุดซักประวัติ ':'ห้องตรวจ ')+cd,color:P.color,pos,via,rects,seats,th:P.th};
+  initStation(s); return s;
+}
+function clearDeskLayer(){
+  deskLayer.traverse(o=>{ if(!o.isMesh) return; const m=o.material; if(!m||SHARED_M.has(m)||[...topMats.values()].includes(m)) return; if(m.map) m.map.dispose(); m.dispose(); });
+  for(const c of deskLayer.children.slice()) deskLayer.remove(c);
+}
+/* สร้างโต๊ะ/ช่องจ่ายยาใหม่ถ้าชุดเปลี่ยน → คืน true (ผู้เรียกต้อง applyStations ต่อ) */
+function buildDesks(want){
+  const nPh=Math.max(1,Math.min(12,(state.opt.phWin|0)||5));
+  const key=JSON.stringify([want[3],want[5],nPh]);
+  if(key===deskKey) return false;
+  deskKey=key; state.deskPrev={3:want[3].slice(),5:want[5].slice()};
+  clearDeskLayer();
+  const desks=[], P3=BUILTIN.find(s=>s.id===3), P5=BUILTIN.find(s=>s.id===5), P6=BUILTIN.find(s=>s.id===6);
+  /* ---- โต๊ะซักประวัติ: แบ่งแนวหน้าโถงเป็นช่องเท่า ๆ กัน โต๊ะละช่อง · เดินเข้าแถวทางช่องว่างระหว่างโต๊ะ ---- */
+  const nT=want[3].length;
+  if(nT){
+    const [X0,X1]=TRI_X, w=(X1-X0)/nT, z=TRI_ROW_Z;
+    want[3].forEach((cd,i)=>{
+      const xa=X0+i*w, xb=xa+w, cx=(xa+xb)/2, dw=Math.min(1.5,w*0.62);
+      dBox(dw,0.76,0.55,deskM,cx,0,z); dBox(dw+0.06,0.05,0.6,deskTop(P3.color),cx,0.76,z,0,false);
+      dBox(0.42,0.28,0.05,darkM,cx-dw*0.18,0.81,z-0.12,0,false);
+      dPerson({shirt:'#7cc6d8',pants:'#7cc6d8',cap:true,hair:HAIRS[i%HAIRS.length]},cx,z-0.62,0);
+      dChair(cx,z+0.75,Math.PI);
+      const rects=TRI_HALL.map(([a,b,c,d])=>[Math.max(a,xa+0.05),Math.min(b,xb-0.05),c,d]).filter(r=>r[1]-r[0]>=0.5);
+      desks.push(mkDesk(cd,P3,[cx,z+0.75],[[xa,CZ],[xa,z+1.3]],rects,[[cx,z+0.75,Math.PI]]));
+    });
+  }
+  /* ---- โต๊ะแพทย์: ตารางในห้องตรวจ ซ้าย/ขวาของทางเดินกลาง · แถวแรกชิดผนังใน · แพทย์หันออกหาประตู ---- */
+  const nE=want[5].length;
+  if(nE){
+    const [x0,,z0,z1]=EXAM_BOX, G=examGrid(), cw=G.bw/G.half, rows=Math.ceil(nE/G.cols);
+    const ch=Math.min(3.2,(z1-EXAM_FRONT-z0)/rows);
+    want[5].forEach((cd,i)=>{
+      const col=i%G.cols, row=Math.floor(i/G.cols), left=col<G.half, k=left?col:col-G.half;
+      const xa=left?x0+k*cw:EXAM_AISLE+k*cw, xb=xa+cw, cx=(xa+xb)/2, za=z0+row*ch, zb=za+ch;
+      const dz=za+0.75, pz=dz+0.7, dw=Math.min(1.2,cw*0.55);
+      dBox(dw,0.76,0.6,woodM,cx,0,dz); dBox(dw+0.04,0.04,0.64,deskTop(P5.color),cx,0.76,dz,0,false);
+      dBox(0.5,0.32,0.05,darkM,cx+dw*0.22,0.8,dz-0.18,0,false);
+      dPerson({shirt:'#fbfbfb',pants:'#2c3e5a',coat:true,steth:true,hair:HAIRS[i%HAIRS.length]},cx,dz-0.62,0);
+      dChair(cx,pz,Math.PI);
+      const wr=[[xa+0.15,xb-0.15,pz+0.55,zb-0.1]].filter(r=>r[3]-r[2]>=0.45);
+      desks.push(mkDesk(cd,P5,[cx,pz],P5.via.slice(),wr,[[cx,pz,Math.PI]]));
+    });
+  }
+  /* ---- ช่องจ่ายยา N ช่อง: เคาน์เตอร์ยาวตามจำนวนช่อง (ไม่เกินความกว้างห้อง) + เภสัชกรประจำช่อง + ป้ายเลขช่อง ---- */
+  {
+    const [cx,cz]=PH_C, W=Math.min(PH_ROOM,Math.max(2.4,nPh*1.05)), ww=W/nPh, x0=cx-W/2;
+    dBox(W,1.02,0.8,deskTop('#e3f4ea'),cx,0,cz); dBox(W+0.1,0.06,0.9,deskTop(P6.color),cx,1.02,cz);
+    dBox(W,0.62,0.05,glassM,cx,1.08,cz-0.12,0,false);
+    const spots=[];
+    for(let k=0;k<nPh;k++){
+      const wx=x0+ww*(k+0.5);
+      if(k) dBox(0.05,0.78,0.8,frameM,x0+ww*k,1.02,cz,0,false);
+      dPerson({shirt:'#fbfbfb',pants:'#2f8f6a',coat:true,hair:HAIRS[k%HAIRS.length]},wx,cz-1.2,0);
+      signBox(deskLayer,'ช่อง '+(k+1),P6.color,'#fff',Math.min(0.95,ww*0.92),0.34,wx,1.98,cz-0.1);
+      spots.push([wx,cz+0.85,Math.PI,false]);
+    }
+    P6.seats=spots;
+  }
+  DESKS=desks; deskByDep=new Map(desks.map(d=>[d.dep,d]));
+  triFurn.visible=!nT; examFurn.visible=!nE;
+  boardFurn.position.x=nT?TRI_X[1]+1.4-4.4:0;                             // กระดานย้ายไปปลายแถวโต๊ะ
+  renderer.shadowMap.needsUpdate=true;
+  return true;
+}
+/* แผนกปัจจุบันมีโต๊ะของตัวเอง → ไปโต๊ะนั้น · ไม่มี → อยู่ที่รอรวมของจุดหลัก */
+function deskFor(s,cd){
+  if(s!==3&&s!==5) return s;
+  const d=deskByDep.get(cd);
+  return d&&d.parent===s&&byId[d.id]?d.id:s;
+}
+
 /* ================================================================ รถวิ่งบนถนนหน้าโรงพยาบาล
    ใช้ถนนเส้นเดิม (z = 26*S+3.1 กว้าง 6.2 ม.) · ไทยชิดซ้าย: วิ่งไป +x อยู่เลนฝั่งอาคาร (z น้อยกว่า)
    สร้างหลัง mergeStatic และตั้ง userData.dyn ไว้ จะได้ไม่ถูกรวมเป็นก้อนเดียวกับฉากที่อยู่นิ่ง
@@ -991,7 +1158,7 @@ function roleOf(pos){
 }
 /* ป้ายถูกสร้างตอนสร้างฉาก ก่อนประกาศ state → ช่วงนั้นถือว่ายังไม่มีข้อมูลเจ้าหน้าที่ */
 const staffOn=s=>{ try{ return !!(state.staffOk&&state.opt&&state.opt.staff!==false&&!s.home); }catch{ return false; } };
-const staffOf=s=>(state.staff&&state.staff.get(s.id))||null;
+const staffOf=s=>(s.desk?state.staffDep&&state.staffDep.get(s.dep):state.staff&&state.staff.get(s.id))||null;
 function makeLabelTex(s){
   const st=staffOn(s);
   return textCanvas(512,st?200:150,(g,W,H)=>{
@@ -1001,16 +1168,18 @@ function makeLabelTex(s){
     g.lineWidth=6; g.strokeStyle=s.color; roundRect(g,12,10,W-24,H-30,32); g.stroke();
     const cy=10+(H-30)/2;
     g.fillStyle=s.color; g.beginPath(); g.arc(70,cy,42,0,Math.PI*2); g.fill();
-    g.fillStyle='#fff'; g.font=`800 54px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(s.no||''),70,cy+3);
+    g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle';
+    if(s.desk){ g.font=`800 34px ${FONT}`; g.fillText(String(s.code||''),70,cy+2,76); }      // โต๊ะย่อย: รหัสแผนกแทนเลขจุด
+    else{ g.font=`800 54px ${FONT}`; g.fillText(String(s.no||''),70,cy+3); }
     let right=W-24;
     if(s.shown){
-      const txt=String(s.count); g.font=`800 46px ${FONT}`;
+      const txt=String(s.total??s.count); g.font=`800 46px ${FONT}`;
       const bw=Math.max(70,g.measureText(txt).width+34), bx=W-30-bw;
       g.fillStyle=s.home?s.color:LVLC[s.lvl]; roundRect(g,bx,cy-31,bw,62,31); g.fill();
       g.fillStyle='#fff'; g.fillText(txt,bx+bw/2,cy+3); right=bx-8;
     }
     g.textAlign='left'; g.fillStyle='#17324a'; fitFont(g,s.name,right-126,40,700,20); g.fillText(s.name,126,cy-17);
-    const sub=s.shown&&!s.home&&s.count?`เฉลี่ย ${fmtMin(s.avg)} · นานสุด ${fmtMin(s.max)}`:s.sub;
+    const sub=s.shown&&!s.home&&(s.total??s.count)?`เฉลี่ย ${fmtMin(s.avg)} · นานสุด ${fmtMin(s.max)}`:s.sub;
     g.fillStyle='#5a7488'; fitFont(g,sub,right-127,25,500,15); g.fillText(sub,127,cy+24);
     if(st){
       const f=staffOf(s), y=cy+82;
@@ -1031,7 +1200,7 @@ function makeLabelTex(s){
 }
 function refreshLabel(s){
   const st=staffOn(s), f=st?staffOf(s):null;
-  const key=`${s.shown}|${s.count}|${s.lvl}|${s.max}|${s.avg}|${st?f?ROLES.map(([k])=>f[k]).join(','):'0':'-'}`; if(key===s.labelKey) return; s.labelKey=key;
+  const key=`${s.shown}|${s.total??s.count}|${s.lvl}|${s.max}|${s.avg}|${s.name}|${st?f?ROLES.map(([k])=>f[k]).join(','):'0':'-'}`; if(key===s.labelKey) return; s.labelKey=key;
   s.lblR=st?200/150:1;
   const old=s.labelMat.map; s.labelMat.map=makeLabelTex(s); s.labelMat.needsUpdate=true; if(old) old.dispose();
 }
@@ -1042,10 +1211,13 @@ function buildStation(s){
   s.discMat=new THREE.MeshBasicMaterial({color:s.color,transparent:true,opacity:.2,depthWrite:false,toneMapped:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
   s.disc=new THREE.Mesh(discG,s.discMat); s.disc.position.set(x,0.03,z); g.add(s.disc);
   s.labelMat=new THREE.SpriteMaterial({map:makeLabelTex(s),depthTest:false,transparent:true,toneMapped:false});
-  s.label=new THREE.Sprite(s.labelMat); s.label.scale.set(4.4*LBL,1.29*LBL,1); s.label.position.set(x,4.5*LBL,z); s.label.renderOrder=10;
+  /* โต๊ะย่อย (ซักประวัติ/ห้องตรวจแยกตาม login) ป้ายเล็กและต่ำกว่า ไม่บังป้ายจุดหลัก */
+  s.lblS=s.desk?0.5:1; const ly=s.desk?2.7:4.5, ph=s.desk?2.2:3.8;
+  if(s.desk){ s.ring.scale.setScalar(0.55); s.disc.scale.setScalar(0.55); }
+  s.label=new THREE.Sprite(s.labelMat); s.label.scale.set(4.4*LBL*s.lblS,1.29*LBL*s.lblS,1); s.label.position.set(x,ly*LBL,z); s.label.renderOrder=s.desk?9:10;
   s.label.userData.stepId=s.id; g.add(s.label);
   s.poleMat=new THREE.MeshBasicMaterial({color:s.color,transparent:true,opacity:.6,toneMapped:false});
-  const pole=new THREE.Mesh(poleG,s.poleMat); pole.scale.y=3.8*LBL; pole.position.set(x,1.9*LBL,z); g.add(pole);
+  const pole=new THREE.Mesh(poleG,s.poleMat); pole.scale.y=ph*LBL; pole.position.set(x,ph/2*LBL,z); g.add(pole);
   s.hit=new THREE.Mesh(hitG,hitMat); s.hit.position.set(x,1.7,z); s.hit.userData.stepId=s.id; g.add(s.hit);
   /* พื้นที่รอของจุด ระบายสีตามระดับเวลารอ (เขียว/เหลือง/แดง) */
 }
@@ -1083,13 +1255,17 @@ function makeCustom(c){
 function applyStations(){
   const cfg=state.opt.st||{}, b=cfg.b||{};
   for(const s of BUILTIN){ const o=b[s.id]||{}; s.name=o.name||s.defName; s.color=o.color||s.defColor; s.off=!s.home&&!!o.off; s.th=goodTh(o.th)||s.defTh; }
-  for(const s of ST) if(s.custom) dropStation(s);
+  for(const d of DESKS){ const p=BUILTIN.find(s=>s.id===d.parent); if(p){ d.th=p.th; d.color=p.color; } }   // โต๊ะย่อยใช้เกณฑ์/สีของจุดหลัก
+  for(const s of ST) if(s.custom||(s.desk&&!DESKS.includes(s))) dropStation(s);
   const cus=(cfg.c||[]).filter(c=>Number.isFinite(c.x)&&Number.isFinite(c.z)).map(makeCustom);
-  ST=[...BUILTIN.filter(s=>!s.home),...cus,...BUILTIN.filter(s=>s.home)];
+  /* โต๊ะย่อยต่อท้ายจุดหลักของมัน (ซักประวัติ → โต๊ะซักประวัติ, ห้องตรวจ → โต๊ะแพทย์) */
+  const withDesks=s=>[s,...(s.off?[]:DESKS.filter(d=>d.parent===s.id))];
+  ST=[...BUILTIN.filter(s=>!s.home).flatMap(withDesks),...cus,...BUILTIN.filter(s=>s.home)];
   Object.keys(byId).forEach(k=>delete byId[k]); ST.forEach(s=>byId[s.id]=s);
+  for(const s of BUILTIN){ s.kids=DESKS.filter(d=>d.parent===s.id&&!s.off); applyDeskArea(s); }
   let no=0;
   for(const s of ST){
-    s.no=s.off?null:++no;
+    s.no=s.off||s.desk?null:++no;
     if(!s.g) buildStation(s); else restyleStation(s);
     s.g.visible=!s.off; s.labelKey=''; refreshLabel(s);
   }
@@ -1299,7 +1475,7 @@ function gridPts(s,sp,off){
 }
 function slotsFor(s){
   if(slotCache.has(s.id)) return slotCache.get(s.id);
-  const seats=s.seats.map(q=>({x:q[0],z:q[1],yaw:q[2],sit:true}));
+  const seats=s.seats.map(q=>({x:q[0],z:q[1],yaw:q[2],sit:q[3]!==false}));   // q[3]=false = จุดยืน (หน้าช่องจ่ายยา)
   const chairs=s.home?[]:gridPts(s,1.0,0); chairs.forEach(c=>c.sit=true);
   const aisles=s.home?[]:gridPts(s,1.0,0.5);
   const base=chairs.concat(aisles);
@@ -1521,13 +1697,13 @@ function updateStations(){
   const pulse=reduceMotion?0.5:(Math.sin(realTime*4)*0.5+0.5);
   for(const s of ST){
     const act=focusSt===s;
-    const busy=s.count>0&&!s.home;
-    s.ring.scale.setScalar(act?1+0.15*pulse:busy?1+0.05*pulse:1);
+    const busy=(s.total??s.count)>0&&!s.home, rs=s.desk?0.55:1;
+    s.ring.scale.setScalar(rs*(act?1+0.15*pulse:busy?1+0.05*pulse:1));
     s.ringMat.color.set(busy?LVLC[s.lvl]:s.color);
     s.discMat.color.set(busy?LVLC[s.lvl]:s.color);
-    s.discMat.opacity=s.home?0.18:busy?0.22+0.12*Math.min(1,s.count/20):0.08;
-    const ls=s.label.userData.sc=lerp(s.label.userData.sc||1,act?1.14:1,0.12);
-    s.label.scale.set(4.4*ls*LBL,1.29*ls*LBL*(s.lblR||1),1);
+    s.discMat.opacity=s.home?0.18:busy?0.22+0.12*Math.min(1,(s.total??s.count)/20):0.08;
+    const ls=s.label.userData.sc=lerp(s.label.userData.sc||1,act?1.14:1,0.12), k=s.lblS||1;
+    s.label.scale.set(4.4*ls*LBL*k,1.29*ls*LBL*k*(s.lblR||1),1);
   }
   /* เจ้าหน้าที่ถูกรวมเป็นเมชนิ่ง (mergeStatic) เพื่อลด draw call — ไม่ขยับแขน/ตัวแล้ว */
   kioskScreens.forEach((m,i)=>{ m.emissiveIntensity=0.45+(byId[2].count?0.35+0.3*pulse:0.1*Math.sin(realTime*2+i)); });
@@ -1542,13 +1718,15 @@ const state={
   tot:0,inHosp:0,home:0,ipd:0,nOpd:0,nEr:0,filtered:0,hidden:0,depSeen:new Map(),mainSeen:new Map(),curSeen:new Map(),
   erOk:false,erSet:new Set(),instant:false,placing:null,
   adm:0,admList:[],rp:null,pend:new Map(),pendOk:false,
+  qt:new Map(),qtCd:new Map(),staffDep:new Map(),deskPrev:null,
 };
 /* เวลา "ตอนนี้" — โหมดย้อนหลังใช้เวลาบนแถบเลื่อน เวลารอ/ประวัติจึงคิดตามเวลาที่กำลังดู */
 const nowMs=()=>state.rp?state.rp.t:Date.now();
 let showAdm=false;
 /* view = มุมมองของผู้ดู: type all/opd/er + กรองคลินิกหลัก (main_dep) / ห้องที่อยู่ตอนนี้ (cur_dep) · st = จุดบริการที่แก้/เพิ่มเอง */
 /* stBy = สีของจุดคิดจากเวลารอเฉลี่ย (avg) หรือคนที่รอนานสุด (max) · chairCol = ระบายสีเก้าอี้รอของจุดตามระดับ (ปิดไว้ — ผู้ใช้ขอเก้าอี้สีฟ้า) */
-function defOpt(){ return {staff:true,every:20,color:'wait',y:30,r:60,stBy:'avg',chairCol:false,busy5:true,map:{},view:{type:'all',main:[],cur:[]},st:{b:{},c:[]}}; }
+/* deskTri/deskExam = แยกโต๊ะซักประวัติ/โต๊ะแพทย์ตามแผนกที่มีคน login (หรือที่กรอง) · phWin = จำนวนช่องจ่ายยา (ผู้ใช้กำหนด 26/11/2569) */
+function defOpt(){ return {staff:true,every:20,color:'wait',y:30,r:60,stBy:'avg',chairCol:false,busy5:true,deskTri:true,deskExam:true,phWin:5,map:{},view:{type:'all',main:[],cur:[]},st:{b:{},c:[]}}; }
 function goodTh(t){
   if(!Array.isArray(t)) return null; const y=Math.round(+t[0]), r=Math.round(+t[1]);
   return y>0&&r>y&&r<=1440?[y,r]:null;
@@ -1662,7 +1840,9 @@ function stationOf(r){
    ใบค้างดึงคนไข้มาที่ห้องเฉพาะตอนอยู่ช่วงก่อนรับยา (ห้องบัตร/ซักประวัติ/ห้องตรวจ) · ER/ห้องยา/การเงินอยู่ที่เดิม
    โหมดย้อนหลัง/ข้อมูลจำลองไม่มีข้อมูลใบสั่งตามเวลา → ใช้ cur_dep ตามเดิม */
 const PEND_FROM=[2,3,5,4,10];
-function placeOf(r){
+/* จุดหลักตามกติกาเดิม แล้วค่อยแยกลงโต๊ะย่อยของแผนกปัจจุบัน (ถ้ามี) */
+function placeOf(r){ const s=placeOf0(r); return s===3||s===5?deskFor(s,str(val(r,'cd'))):s; }
+function placeOf0(r){
   r.__ps=null;
   let s=stationOf(r);
   if(!s||state.rp||!state.pendOk) return s;
@@ -1698,6 +1878,30 @@ async function loadPending(day){
   }
   return ok?m:null;
 }
+/* เวลาที่ถูกส่งมาจุดปัจจุบัน (ผู้ใช้กำหนด 26/11/2569) = opd_dep_queue.queue_datetime ล่าสุดของ (vn, แผนกปัจจุบัน)
+   ห้องตรวจ = ซักประวัติส่งต่อมา · ห้องยา = ห้องตรวจส่งมา · การเงิน = ซักประวัติ/ห้องตรวจ/ห้องยาส่งมา (จุดอื่นใช้กติกาเดียวกัน)
+   จุดซักประวัติไม่ใช้ค่านี้ — นับจากเวลาเปิด visit (sinceOf)
+   ovst.cur_dep_time ที่ ppbh แทบเท่ากับเวลามา รพ. (26/11 11:00: ห้องยา OPD เฉลี่ย 191 นาที แต่ถูกส่งมาจริงแค่ 19 นาที)
+   ดึงเฉพาะ visit ที่ย้ายแผนกหรือยังไม่เคยดึง แล้วจำไว้ใน state.qt ("vn|แผนก" → ms, 0 = ไม่มีแถว) */
+const hasQt=()=>hasTable('opd_dep_queue')&&['vn','depcode','queue_datetime'].every(c=>has('opd_dep_queue',c));
+async function loadQt(list,day){
+  if(!hasQt()) return;
+  const need=[];
+  for(const r of list){
+    if(str(val(r,'an'))) continue;
+    const vn=str(val(r,'vn')), cd=str(val(r,'cd')); if(!vn||!cd||isTriDep(cd)) continue;
+    if(state.qtCd.get(vn)!==cd){ state.qt.delete(vn+'|'+cd); state.qtCd.set(vn,cd); }   // ย้ายแผนก → ต้องดึงใหม่ (อาจกลับมาแผนกเดิมรอบสอง)
+    if(!state.qt.has(vn+'|'+cd)) need.push(vn);
+  }
+  for(let i=0;i<need.length;i+=60){
+    const part=need.slice(i,i+60);
+    const r=await rows(`SELECT q.vn AS vn, q.depcode AS d, max(q.queue_datetime) AS qt FROM opd_dep_queue q
+      WHERE q.vn IN (${part.map(sq).join(',')}) GROUP BY q.vn, q.depcode`);
+    if(!r) return;
+    r.forEach(x=>state.qt.set(str(val(x,'vn'))+'|'+str(val(x,'d')),parseDT(val(x,'qt'),day)||0));
+    part.forEach(vn=>{ const k=vn+'|'+state.qtCd.get(vn); if(!state.qt.has(k)) state.qt.set(k,0); });
+  }
+}
 /* เจ้าหน้าที่ที่ login HOSxP อยู่ (ยืนยัน ppbh 24/11/2569):
    doctor_online = 1 แถวต่อคน (doctor_code, online_depcode = แผนกที่ login, last_active = epoch ของเวลาท้องถิ่น ไม่ใช่ UTC)
    ตำแหน่ง = doctor.position_id → doctor_position.name · นับคนที่ last_active ภายใน 15 นาที
@@ -1725,14 +1929,16 @@ function staffStation(dep){
   return sure&&byId[s]&&!byId[s].off&&!byId[s].home?s:0;
 }
 function applyStaff(list){
-  const m=new Map(); let tot=0, out=0;
+  const m=new Map(), byDep=new Map(); let tot=0, out=0;
   for(const x of list||[]){
+    const g=byDep.get(x.dep)||{doc:0,nur:0,ph:0,fin:0,oth:0,tot:0,list:[]};   // ต่อแผนก — ป้ายของโต๊ะย่อย
+    g[roleOf(x.pos)]+=x.n; g.tot+=x.n; g.list.push(x); byDep.set(x.dep,g);
     const id=staffStation(x.dep); tot+=x.n;
     if(!id){ out+=x.n; continue; }
     const f=m.get(id)||{doc:0,nur:0,ph:0,fin:0,oth:0,tot:0,list:[]};
     f[roleOf(x.pos)]+=x.n; f.tot+=x.n; f.list.push(x); m.set(id,f);
   }
-  state.staff=m; state.staffTot=tot; state.staffOut=out;
+  state.staff=m; state.staffDep=byDep; state.staffTot=tot; state.staffOut=out;
 }
 /* ER = มีแถวใน er_regist (ยืนยัน ppbh 23/11/2569) · ถ้าไม่มีตารางนี้ เดาจากชื่อคลินิกหลัก (main_dep) */
 function rowType(r){
@@ -1785,12 +1991,13 @@ function sessionLost(){
 function resetAll(){
   for(const a of avs) a.dead=true;
   state.first=true; state.rows=[]; state.slots=new Map(); state.people=new Map(); state.names=new Map(); state.depSeen=new Map();
+  state.qt=new Map(); state.qtCd=new Map();
   selectAvatar(null); focusSt=null;
 }
 /* ค่าตั้งถูกจำไว้สองชั้น เปิดหน้าใหม่หรือเปลี่ยนฐานแล้วได้ค่าที่เคยตั้งไว้กลับมาเสมอ
    - ค่าแสดงผล (รอบดึงข้อมูล สีเสื้อ เกณฑ์เวลารอ สีเก้าอี้ เจ้าหน้าที่ cur_dep_busy) → `pj3d.pref` ใช้ร่วมทุกฐานและโหมดจำลอง
    - ค่าที่ผูกกับฐาน (แผนก→จุดบริการ จุดที่แก้/เพิ่มเอง ตัวกรองคลินิก/ห้อง) → `pj3d.opt.<ชื่อฐาน>` (โหมดจำลองใช้ชื่อ demo) */
-const PREF_KEYS=['every','color','y','r','stBy','chairCol','busy5','staff'];
+const PREF_KEYS=['every','color','y','r','stBy','chairCol','busy5','staff','deskTri','deskExam','phWin'];
 const optKey=()=>LS_OPT+(state.demo?'demo':(state.db||'-'));
 function readJson(k){ try{ const o=JSON.parse(lsGet(k)||'null'); return o&&typeof o==='object'?o:null; }catch{ return null; } }
 function applyOpt(o,s){
@@ -1802,6 +2009,9 @@ function applyOpt(o,s){
   if(typeof s.chairCol==='boolean') o.chairCol=s.chairCol;   // ชื่อเดิม zone (ค่าเริ่มต้นเคยเป็นเปิด) ไม่อ่านแล้ว → เก้าอี้ฟ้า
   if(typeof s.busy5==='boolean') o.busy5=s.busy5;
   if(typeof s.staff==='boolean') o.staff=s.staff;
+  if(typeof s.deskTri==='boolean') o.deskTri=s.deskTri;
+  if(typeof s.deskExam==='boolean') o.deskExam=s.deskExam;
+  if(Number.isInteger(s.phWin)&&s.phWin>=1&&s.phWin<=12) o.phWin=s.phWin;
   if(s.map&&typeof s.map==='object') o.map=s.map;
   const v=s.view||{};
   if(['all','opd','er'].includes(v.type)) o.view.type=v.type;
@@ -1899,12 +2109,16 @@ async function load(){
       const er=await loadEr(day);
       const slots=await loadSlots(day);
       const pend=await loadPending(day);
-      const staff=state.opt.staff!==false?await loadStaff().catch(e=>{ console.warn(e); return null; }):null;
+      await loadQt(vis,day).catch(e=>console.warn(e));
+      /* ข้อมูล login ใช้ทั้งป้ายเจ้าหน้าที่และการแยกโต๊ะ → ดึงถ้าเปิดอย่างใดอย่างหนึ่ง */
+      const o=state.opt, needStaff=o.staff!==false||o.deskTri||o.deskExam;
+      const staff=needStaff?await loadStaff().catch(e=>{ console.warn(e); return null; }):null;
       if(day!==state.day||state.rp) return;                               // ผู้ใช้เข้าโหมดย้อนหลังระหว่างรอ
       state.staffOk=!!staff; state.staffRaw=staff||[];
       state.rows=vis; state.slots=slots; state.erOk=!!er; state.erSet=er||new Set();
       state.pendOk=!!pend; state.pend=pend||new Map();
     }
+    if(buildDesks(deskWanted())){ applyStations(); state.instant=state.first; }   // ชุดโต๊ะเปลี่ยน → จัดผังช่องรอใหม่
     sync();
     applyStaff(state.staffRaw); for(const s of ST) s.labelKey='';
     stats(); renderList();
@@ -1923,8 +2137,15 @@ async function load(){
 }
 
 /* ---- ข้อมูล → ตัวละคร ---- */
+/* เวลารอ (ผู้ใช้กำหนด 26/11/2569):
+   1 จุดซักประวัติ = นับจากเวลาเปิด visit · 2 ห้องตรวจ = นับจากที่ซักประวัติส่งต่อมา · 3 ห้องยา = นับจากที่ห้องตรวจส่งมา
+   4 การเงิน = นับจากที่ซักประวัติ/ห้องตรวจ/ห้องยาส่งมา → ข้อ 2–4 (และจุดอื่น) = เวลาที่ถูกส่งเข้าแผนกปัจจุบัน (opd_dep_queue)
+   รอแล็บ/X-ray ยังนับจากเวลาสั่งเหมือนเดิม · ไม่มีข้อมูลส่งต่อ → cur_dep_time → เวลาที่เห็นย้ายจุด → เวลามา */
 function sinceOf(a){
   if(a.row&&a.row.__ps){ a.sinceKind='ord'; return a.row.__ps; }          // รอแล็บ/X-ray นับจากเวลาสั่ง
+  const cd=str(val(a.row,'cd'));
+  if(isTriDep(cd)){ const vt=parseDT(val(a.row,'vt'),state.day); if(vt){ a.sinceKind='visit'; return vt; } }
+  if(!state.rp&&!state.demo){ const q=state.qt.get(a.vn+'|'+cd); if(q){ a.sinceKind='q'; return q; } }
   const ct=parseDT(val(a.row,'ct'),state.day);
   if(ct){ a.sinceKind='ct'; return ct; }
   if(a.obsSince){ a.sinceKind='obs'; return a.obsSince; }
@@ -1992,35 +2213,41 @@ function sync(){
     a.row=r; groups.get(st).push(a);
   }
   for(const a of avs) if(!seen.has(a.vn)&&!a.dead) leave(a);
-  for(const s of ST){
+  /* โต๊ะย่อยจัดช่องก่อน: คนที่ล้นช่องของโต๊ะไปรอที่ที่รอรวมของจุดหลัก (ยังนับเป็นคนของโต๊ะนั้น) — ห้องตรวจจุคนรอได้ไม่กี่คนต่อโต๊ะ */
+  const spill=new Map(), order=ST.filter(s=>s.desk).concat(ST.filter(s=>!s.desk));
+  for(const s of order){
     if(s.off){ s.members=[]; s.count=0; s.over=0; s.shown=false; continue; }
     if(s.home){ s.count=home; s.members=[]; s.shown=true; continue; }
-    const g=groups.get(s.id);
-    g.forEach(a=>{ a.since=sinceOf(a); });
-    g.sort((x,y)=>x.since-y.since);
+    const own0=groups.get(s.id);
+    own0.forEach(a=>{ a.since=sinceOf(a); });
+    own0.sort((x,y)=>x.since-y.since);
+    const extra=spill.get(s.id)||[], g=extra.length?own0.concat(extra):own0;
     const slots=slotsFor(s,g.length);
     /* ช่องของใครก็ของคนนั้น: คนที่ยังอยู่จุดเดิมได้ช่องเดิมทุกครั้งที่รีเฟรช จะไม่ขยับตามคนที่เดินออกไป
        ที่ว่างถูกเติมด้วยคนที่เพิ่งย้ายมา โดยเริ่มจากช่องที่ใกล้จุดบริการที่สุด (โหลดครั้งแรก = คนที่รอนานสุดได้ช่องใน) */
-    const own=new Array(slots.length), fresh=[];
+    const own=new Array(slots.length), fresh=[], got=new Set();
     for(const a of g){
       const ix=a.slotIx;
-      if(a.st===s.id&&a.slotGen===slotGen&&ix!=null&&ix<slots.length&&!own[ix]) own[ix]=a;
+      if(a.st===s.id&&a.slotGen===slotGen&&ix!=null&&ix<slots.length&&!own[ix]){ own[ix]=a; got.add(a); }
       else fresh.push(a);
     }
     let free=0;
     for(const a of fresh){
       while(free<slots.length&&own[free]) free++;
-      if(free<slots.length){ own[free]=a; a.slotIx=free; a.slotGen=slotGen; free++; }
-      else a.slotIx=null;                                                  // ล้นที่ → ไม่แสดงตัวในฉาก (ยังนับในตัวเลข)
+      if(free<slots.length){ own[free]=a; a.slotIx=free; a.slotGen=slotGen; got.add(a); free++; }
+      else if(!s.desk) a.slotIx=null;                                      // ล้นที่ → ไม่แสดงตัวในฉาก (ยังนับในตัวเลข)
+      /* โต๊ะย่อยเต็ม: ไม่ล้างเลขช่อง — คนที่เคยล้นไปรอที่ที่รอรวมจะได้ช่องเดิมที่นั่น ไม่ขยับทุกรอบ */
     }
+    let spilled=0;
     g.forEach(a=>{
-      const sl=a.slotIx!=null?slots[a.slotIx]:null;
+      const sl=got.has(a)?slots[a.slotIx]:null;
+      if(!sl&&s.desk){ if(!spill.has(s.parent)) spill.set(s.parent,[]); spill.get(s.parent).push(a); spilled++; return; }
       if(!sl){ a.hide=true; a.st=s.id; a.slot=null; a.path=null; return; }
       const wasHidden=a.hide; a.hide=false;
       if(wasHidden&&a.placed){ a.x=sl.x; a.z=sl.z; a.sc=0; a.path=null; a.st=s.id; a.slot=sl; return; }
       moveTo(a,s,sl,initial||(wasHidden&&!a.placed));
     });
-    s.members=g; s.count=g.length; s.over=Math.max(0,g.length-slots.length); s.shown=true;
+    s.members=own0; s.count=own0.length; s.spilled=spilled; s.over=s.desk?0:Math.max(0,g.length-slots.length); s.shown=true;
   }
   Object.assign(state,{tot,home,ipd,hidden,nOpd,nEr,filtered,depSeen,mainSeen,curSeen,adm:admList.length,admList});
   state.inHosp=ST.reduce((t,s)=>t+(s.home?0:s.count),0);
@@ -2055,8 +2282,11 @@ function stats(){
   for(const s of ST){
     if(s.home){ refreshLabel(s); continue; }
     let mx=0,sum=0,n=0,nY=0,nR=0;
-    for(const a of s.members){ const w=waitMin(a); if(w==null) continue; mx=Math.max(mx,w); sum+=w; n++; const lv=lvlAt(w,s); if(lv>=1) nY++; if(lv===2) nR++; }
-    s.max=mx; s.avg=n?Math.round(sum/n):0; s.nY=nY; s.nR=nR; long+=nR;
+    /* จุดหลักที่มีโต๊ะย่อย: ตัวเลข/สีของจุด = รวมทุกโต๊ะ (s.all, s.total) · คนในฉากยังอยู่ที่โต๊ะของตัวเอง */
+    const kids=!s.desk&&s.kids&&s.kids.length?s.kids:null;
+    s.all=kids?s.members.concat(...kids.map(k=>k.members)):s.members; s.total=kids?s.all.length:undefined;
+    for(const a of s.all){ const w=waitMin(a); if(w==null) continue; mx=Math.max(mx,w); sum+=w; n++; const lv=lvlAt(w,s); if(lv>=1) nY++; if(lv===2) nR++; }
+    s.max=mx; s.avg=n?Math.round(sum/n):0; s.nY=nY; s.nR=nR; if(!s.desk) long+=nR;
     s.lvl=n?lvlAt(state.opt.stBy==='max'?s.max:s.avg,s):0; refreshLabel(s);
   }
   colorize(); paintChairs();
@@ -2075,8 +2305,8 @@ function renderList(){
   if(!L.childElementCount){
     for(const s of ST){
       s.el=null; if(s.off) continue;
-      const d=document.createElement('div'); d.className='st'; d.tabIndex=0; d.setAttribute('role','button'); d.dataset.id=s.id;
-      d.innerHTML=`<span class="num" style="background:${s.color}">${s.no}</span><span class="txt">${esc(s.name)}<small></small></span><span class="cnt">–</span>`;
+      const d=document.createElement('div'); d.className='st'+(s.desk?' sub':''); d.tabIndex=0; d.setAttribute('role','button'); d.dataset.id=s.id;
+      d.innerHTML=`<span class="num" style="background:${s.color}">${s.desk?esc(s.code):s.no}</span><span class="txt">${esc(s.name)}<small></small></span><span class="cnt">–</span>`;
       d.addEventListener('click',()=>selectStation(s.id));
       d.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectStation(s.id); } });
       s.el=d; L.appendChild(d);
@@ -2085,15 +2315,20 @@ function renderList(){
   for(const s of ST){
     if(!s.el) continue;
     s.el.classList.toggle('active',focusSt===s);
-    const busy=!s.home&&s.count>0;
+    const cnt=s.total??s.count, busy=!s.home&&cnt>0;
     s.el.classList.toggle('l1',busy&&s.lvl===1); s.el.classList.toggle('l2',busy&&s.lvl===2);
-    const c=s.el.querySelector('.cnt'); c.textContent=s.shown?s.count:'–'; c.className='cnt'+(s.home?'':' l'+s.lvl);
+    const c=s.el.querySelector('.cnt'); c.textContent=s.shown?cnt:'–'; c.className='cnt'+(s.home?'':' l'+s.lvl);
     const [ty,tr]=thOf(s), sm=s.el.querySelector('small');
     if(s.home) sm.textContent=s.sub;
+    else if(s.desk){                                                        // โต๊ะย่อย: บรรทัดเดียว
+      const f=staffOn(s)?staffOf(s):null;
+      sm.innerHTML=(s.count?`เฉลี่ย <b>${esc(fmtMin(s.avg))}</b> · นานสุด ${esc(fmtMin(s.max))}${s.nR?` · <span class="wr">เกิน ${tr}′ ${s.nR}</span>`:''}${s.spilled?` · รอที่ที่รอรวม ${s.spilled}`:''}`:'ไม่มีคนรอ')
+        +(f?` · ${ROLES.filter(([k])=>f[k]).map(([k,l])=>`${l} ${f[k]}`).join(' ')}`:'');
+    }
     else{
       const dn=s.done.length;
-      sm.innerHTML= (s.count
-        ?`เฉลี่ย <b>${esc(fmtMin(s.avg))}</b> · นานสุด ${esc(fmtMin(s.max))}${s.nY?` · <span class="wy">เกิน ${ty}′ ${s.nY}</span>`:''}${s.nR?` · <span class="wr">เกิน ${tr}′ ${s.nR}</span>`:''}${s.over?` · แสดงไม่ครบ ${s.over}`:''}`
+      sm.innerHTML= (cnt
+        ?`${s.kids&&s.kids.length?`แยก ${s.kids.length} โต๊ะ · `:''}เฉลี่ย <b>${esc(fmtMin(s.avg))}</b> · นานสุด ${esc(fmtMin(s.max))}${s.nY?` · <span class="wy">เกิน ${ty}′ ${s.nY}</span>`:''}${s.nR?` · <span class="wr">เกิน ${tr}′ ${s.nR}</span>`:''}${s.over?` · แสดงไม่ครบ ${s.over}`:''}`
         :esc(s.sub))
         +(staffOn(s)?(()=>{ const f=staffOf(s); return `<br><span class="th">เจ้าหน้าที่ ${f?ROLES.filter(([k])=>f[k]).map(([k,l,c])=>`<i style="background:${c}"></i>${l} ${f[k]}`).join(' '):'ไม่มี login'}</span>`; })():'')
         +`<br><span class="th">เกณฑ์ <i style="background:${LVLC[1]}"></i>${ty} <i style="background:${LVLC[2]}"></i>${tr} นาที${dn?` · ผ่านจุดแล้ว ${dn} คน ใช้เวลาเฉลี่ย ${esc(fmtMin(avgOf(s.done)))}`:''}</span>`;
@@ -2120,13 +2355,14 @@ function renderInfo(){
   if(sel&&!sel.dead){
     const a=sel, s=byId[a.st], r=a.row||{}, hn=str(val(r,'hn')), q=state.slots.get(a.vn)||[];
     const nm=state.names.get(hn);
-    const kind=a.sinceKind==='ct'?'':a.sinceKind==='ord'?' (นับจากเวลาสั่ง — ห้องยังไม่รับ)':a.sinceKind==='obs'?' (นับจากที่หน้านี้เห็นย้ายจุด)':' (นับจากเวลามาถึง)';
+    const kind=a.sinceKind==='q'?` (ถูกส่งมาจุดนี้ ${hms(new Date(a.since)).slice(0,5)} น.)`:a.sinceKind==='visit'?' (นับจากเวลาเปิด visit)'
+      :a.sinceKind==='ct'?' (ตาม cur_dep_time)':a.sinceKind==='ord'?' (นับจากเวลาสั่ง — ห้องยังไม่รับ)':a.sinceKind==='obs'?' (นับจากที่หน้านี้เห็นย้ายจุด)':' (นับจากเวลามาถึง)';
     const sexTxt=a.sex==='1'?'ชาย':a.sex==='2'?'หญิง':'';
     const ageTxt=a.age!=null?`${a.age} ปี`:'';
     const vt=str(val(r,'vt')).slice(0,5);
     const hist=a.hist.map(h=>`<li>${h.t?hms(h.t).slice(0,5):'ตอนเปิดหน้า'} · ${esc(h.dep)} → ${esc(byId[h.st]?byId[h.st].name:'')}</li>`).join('');
     const typ=rowType(r)==='er'?'ER':'OPD';
-    B.innerHTML=`<div class="ih"><span class="badge" style="background:${s?s.color:'#9aa6b2'}">${s?s.no:'–'}</span>
+    B.innerHTML=`<div class="ih"><span class="badge" style="background:${s?s.color:'#9aa6b2'}">${s?(s.no||esc(s.code||'')):'–'}</span>
       <div><div class="state">${a.leaving?'กำลังออกจากโรงพยาบาล':s?esc(s.name):''}</div><div class="ititle">${esc(nm||(q.length?'คิว '+q[q.length-1]:'HN '+hn))}</div></div>
       <button class="x" id="btnX" aria-label="ปิด">✕</button></div>
       <dl class="kv">
@@ -2164,20 +2400,23 @@ function renderInfo(){
       B.innerHTML=`<div class="ih"><span class="badge" style="background:${s.color}">${s.no}</span><div><div class="state">วันนี้</div><div class="ititle">${esc(s.name)} ${s.count} ราย</div></div><button class="x" id="btnX" aria-label="ปิด">✕</button></div>
       <p class="help" style="margin-top:8px">คนไข้ที่แผนกปัจจุบันใน HOSxP เป็น "กลับบ้าน" จะเดินออกทางออกแล้วหายไปจากแผนที่${state.ipd?` · ไม่นับ IPD (Admit แล้ว) ${state.ipd} ราย`:''}${state.hidden?` · ซ่อนตามตั้งค่า ${state.hidden} ราย`:''}</p>`;
     }else{
-      const list=s.members.slice().sort((x,y)=>(waitMin(y)||0)-(waitMin(x)||0)).slice(0,60);
+      const mem=s.all||s.members, tot=s.total??s.count;
+      const list=mem.slice().sort((x,y)=>(waitMin(y)||0)-(waitMin(x)||0)).slice(0,60);
       const [ty,tr]=thOf(s), dn=s.done.length, srt=s.done.slice().sort((x,y)=>x-y);
-      B.innerHTML=`<div class="ih"><span class="badge" style="background:${s.color}">${s.no}</span>
-        <div><div class="state">${s.count} ราย · เฉลี่ย ${esc(fmtMin(s.avg))} · นานสุด ${esc(fmtMin(s.max))}</div><div class="ititle">${esc(s.name)}</div></div>
+      const desksTxt=s.kids&&s.kids.length?`<dt>แยกโต๊ะ</dt><dd>${s.kids.map(k=>`<span class="dot" style="background:${LVLC[k.lvl]}"></span>${esc(k.name)} <b>${k.count}</b>`).join(' · ')}<br><small class="note">${s.id===3?'จุดซักประวัติ':'ห้องตรวจ'}ที่มีเจ้าหน้าที่ login อยู่ (หรือที่กรองไว้) · ที่เหลือ ${s.count} ราย = ที่รอรวม</small></dd>`:'';
+      B.innerHTML=`<div class="ih"><span class="badge" style="background:${s.color}">${s.no||esc(s.code||'')}</span>
+        <div><div class="state">${tot} ราย · เฉลี่ย ${esc(fmtMin(s.avg))} · นานสุด ${esc(fmtMin(s.max))}</div><div class="ititle">${esc(s.desk?depLabel(s.dep):s.name)}</div></div>
         <button class="x" id="btnX" aria-label="ปิด">✕</button></div>
         <dl class="kv">
           <dt>เกณฑ์ของจุดนี้</dt><dd><span class="dot" style="background:${LVLC[1]}"></span>เหลือง ≥ ${ty} นาที · <span class="dot" style="background:${LVLC[2]}"></span>แดง ≥ ${tr} นาที</dd>
-          <dt>รออยู่ตอนนี้</dt><dd><span class="dot" style="background:${LVLC[0]}"></span>${s.count-s.nY} · <span class="dot" style="background:${LVLC[1]}"></span>${s.nY-s.nR} · <span class="dot" style="background:${LVLC[2]}"></span>${s.nR} ราย</dd>
+          <dt>รออยู่ตอนนี้</dt><dd><span class="dot" style="background:${LVLC[0]}"></span>${tot-s.nY} · <span class="dot" style="background:${LVLC[1]}"></span>${s.nY-s.nR} · <span class="dot" style="background:${LVLC[2]}"></span>${s.nR} ราย</dd>
+          ${desksTxt}
           ${staffOn(s)?`<dt>เจ้าหน้าที่ login</dt><dd>${staffHtml(s)}</dd>`:''}
           <dt>ผ่านจุดนี้แล้ว</dt><dd>${dn?`${dn} ราย · เฉลี่ย ${esc(fmtMin(avgOf(srt)))} · มัธยฐาน ${esc(fmtMin(srt[Math.floor(dn/2)]))} · นานสุด ${esc(fmtMin(srt[dn-1]))}`:'ยังไม่มี'} <small class="note">(นับตั้งแต่เปิดหน้านี้)</small></dd>
         </dl>
         <div class="plist">${list.map(a=>`<div class="pt" tabindex="0" data-vn="${esc(a.vn)}"><span class="dot" style="background:${LVLC[lvlAt(waitMin(a),s)]}"></span>
           <span>${esc(ptTitle(a))} <small>· ${esc(depName(a))}</small></span><b>${esc(fmtMin(waitMin(a)))}</b></div>`).join('')||'<p class="help">ไม่มีคนไข้ที่จุดนี้ตอนนี้</p>'}
-        ${s.members.length>60?`<p class="help">แสดง 60 จาก ${s.members.length} ราย (รอนานสุดก่อน)</p>`:''}</div>`;
+        ${mem.length>60?`<p class="help">แสดง 60 จาก ${mem.length} ราย (รอนานสุดก่อน)</p>`:''}</div>`;
     }
     $('btnX').onclick=()=>{ focusSt=null; renderList(); renderInfo(); };
     return;
@@ -2186,6 +2425,7 @@ function renderInfo(){
     <p class="help" style="margin-top:6px">กด ▶ เพื่อเล่น · ลากแถบเพื่อกระโดดไปเวลาอื่น · เลือก "ทั้งวัน" หรือรายชั่วโมง · ×60 = 1 ชั่วโมงเล่นใน 1 นาที</p>
     <p class="help" style="margin-top:6px">คนไข้ที่รับบริการจุดสุดท้ายเสร็จแล้วเกิน 15 นาทีและไม่ถูกส่งต่อ ถือว่าออกจาก รพ. แล้ว (นับรวมในกลับบ้าน)</p>`; return; }
   B.innerHTML=`<p class="help"><b>ตำแหน่งคนไข้ = แผนกปัจจุบันใน HOSxP</b> (ovst.cur_dep) ของ visit วันนี้ ดึงใหม่ทุก ${state.opt.every} วินาที — เมื่อคนไข้ถูกส่งต่อแผนก ตัวละครจะเดินไปจุดใหม่ให้เห็นทันที</p>
+    <p class="help" style="margin-top:6px"><b>เวลารอ</b>: จุดซักประวัติ นับจากเวลาเปิด visit · ห้องตรวจ ห้องยา การเงิน และจุดอื่น นับจากเวลาที่จุดก่อนหน้าส่งต่อมา (opd_dep_queue) · รอแล็บ/X-ray นับจากเวลาสั่ง</p>
     <p class="help" style="margin-top:6px">คลิกคนไข้เพื่อดูรายละเอียด · คลิกจุดบริการเพื่อดูรายชื่อที่รออยู่ · ลากเพื่อหมุน · ล้อเมาส์/บีบนิ้วเพื่อซูม · ดับเบิลคลิกรีเซ็ต</p>
     ${state.conn&&!state.mkt?'<p class="help" style="margin-top:6px">ชื่อคนไข้ไม่แสดง เพราะ BMS Session ปิดบังชื่อ (ต้องเปิดจาก HOSxP พร้อม marketplace-token)</p>':''}`;
 }
@@ -2241,6 +2481,7 @@ function openSettings(){
   document.querySelectorAll('#segColor button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.c===o.color)));
   document.querySelectorAll('#segStBy button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.b===o.stBy)));
   $('thY').value=o.y; $('thR').value=o.r; $('optBusy').checked=o.busy5; $('optStaff').checked=o.staff!==false; $('optZone').checked=o.chairCol;
+  $('optDeskTri').checked=!!o.deskTri; $('optDeskExam').checked=!!o.deskExam; $('optPhWin').value=o.phWin;
   document.querySelectorAll('#segBeds button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n===BEDS)));
   document.querySelectorAll('#segTour button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n===tourSec())));
   document.querySelectorAll('#segTourEvery button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n===tourEvery())));
@@ -2255,7 +2496,7 @@ $('segBeds').addEventListener('click',e=>{
 });
 /* ตารางจุดบริการ: ในตัว = ชื่อ/สี/แสดง · เพิ่มเอง = ชื่อ/สี/ย้าย/ลบ · กลับบ้าน = ชื่อ/สี */
 function drawStEditor(){
-  $('stBody').innerHTML=ST.map(s=>`<tr data-id="${s.id}"${s.custom?' data-custom="1"':''}>
+  $('stBody').innerHTML=ST.filter(s=>!s.desk).map(s=>`<tr data-id="${s.id}"${s.custom?' data-custom="1"':''}>
     <td style="width:44px"><input type="color" value="${esc(s.color)}" aria-label="สีของ ${esc(s.name)}" style="width:38px;height:30px;padding:2px"></td>
     <td><input type="text" value="${esc(s.name)}" aria-label="ชื่อจุดบริการ" style="width:100%;min-height:30px;font-size:12.5px"><br><small>${s.custom?'เพิ่มเอง':s.home?'จุดสุดท้าย (นับคนกลับบ้าน)':'จุดในตัว'}</small></td>
     <td style="white-space:nowrap">${s.home?'':`<input type="number" class="thin" data-th="y" min="1" max="1440" value="${s.th?s.th[0]:''}" placeholder="${state.opt.y}" aria-label="เกณฑ์เหลือง (นาที) ของ ${esc(s.name)}" style="border-color:var(--warn)">
@@ -2266,7 +2507,7 @@ function drawStEditor(){
 }
 function drawMap(){
   const o=state.opt, deps=[...state.depSeen.entries()].sort((a,b)=>b[1]-a[1]);
-  const live=ST.filter(s=>!s.off);
+  const live=ST.filter(s=>!s.off&&!s.desk);
   const opts=v=>{
     const auto=v?guessStation(state.dep.get(v)):2, as=byId[auto], cur=o.map[v];
     return `<option value="">อัตโนมัติ → ${as&&!as.off?`${as.no}. ${esc(as.name)}`:'(จุดนี้ปิดอยู่ — ไม่แสดง)'}</option>`
@@ -2298,10 +2539,12 @@ function readSettings(){
   document.querySelectorAll('#mapBody select').forEach(s=>{ const cd=s.dataset.cd; if(s.value==='') delete map[cd]; else map[cd]=Number(s.value); });
   for(const k of Object.keys(map)){ const v=map[k]; if(v>=100&&!keep.has(v)) delete map[k]; }       // จุดที่ลบไปแล้ว → กลับเป็นอัตโนมัติ
   const sb=document.querySelector('#segStBy button[aria-pressed="true"]');
-  Object.assign(state.opt,{every:ev?+ev.dataset.s:20,color:co?co.dataset.c:'wait',y,r,stBy:sb?sb.dataset.b:'avg',chairCol:$('optZone').checked,busy5:$('optBusy').checked,staff:$('optStaff').checked,map,st:{b,c}});
+  const phWin=Math.max(1,Math.min(12,parseInt($('optPhWin').value,10)||5));
+  Object.assign(state.opt,{every:ev?+ev.dataset.s:20,color:co?co.dataset.c:'wait',y,r,stBy:sb?sb.dataset.b:'avg',chairCol:$('optZone').checked,busy5:$('optBusy').checked,staff:$('optStaff').checked,
+    deskTri:$('optDeskTri').checked,deskExam:$('optDeskExam').checked,phWin,map,st:{b,c}});
   stats(); renderList(); renderInfo();
 }
-function commitOpt(msg){ saveOpt(); applyStations(); state.instant=true; sync(); if(msg) toast(msg); }
+function commitOpt(msg){ saveOpt(); buildDesks(deskWanted()); applyStations(); state.instant=true; sync(); if(msg) toast(msg); }
 document.querySelectorAll('.seg').forEach(g=>g.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); }));
 $('setSave').addEventListener('click',()=>{
   readSettings(); $('ovSet').hidden=true; commitOpt('บันทึกการตั้งค่าแล้ว');
@@ -2380,9 +2623,11 @@ $('ovFil').addEventListener('change',e=>{
   const cb=e.target.closest('input[type=checkbox][data-k]'); if(!cb) return;
   const arr=state.opt.view[cb.dataset.k], i=arr.indexOf(cb.value);
   if(cb.checked&&i<0) arr.push(cb.value); if(!cb.checked&&i>=0) arr.splice(i,1);
-  syncViewUI(); saveOpt(); state.instant=true; sync(); drawFilter();
+  viewChanged();
 });
-$('fClear').addEventListener('click',()=>{ state.opt.view.main=[]; state.opt.view.cur=[]; syncViewUI(); saveOpt(); state.instant=true; sync(); drawFilter(); });
+/* ตัวกรองห้องเปลี่ยน → โต๊ะซักประวัติ/โต๊ะแพทย์อาจเปลี่ยนตาม ("แยกโต๊ะตามที่กรอง") */
+function viewChanged(){ syncViewUI(); saveOpt(); if(buildDesks(deskWanted())) applyStations(); state.instant=true; sync(); drawFilter(); }
+$('fClear').addEventListener('click',()=>{ state.opt.view.main=[]; state.opt.view.cur=[]; viewChanged(); });
 $('ovFil').addEventListener('mousedown',e=>{ if(e.target===$('ovFil')) $('ovFil').hidden=true; });
 $('setSid').addEventListener('click',()=>{ $('ovSet').hidden=true; showConn('เปลี่ยน session','วาง BMS session ID ใหม่'); });
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ b.closest('.ov').hidden=true; }));
