@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ระบบคิวห้องตรวจแพทย์ 3D</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#dce7ee;font-family:'Sarabun','Noto Sans Thai','Leelawadee UI','Leelawadee','Tahoma','Thonburi',sans-serif;color:#17303f}
+#app{position:fixed;inset:0}
+#app canvas{display:block;touch-action:none;cursor:grab;outline:none}
+#app canvas:active{cursor:grabbing}
+.panel{background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(23,48,63,.08);border-radius:14px;box-shadow:0 8px 26px rgba(16,40,56,.14)}
+#titleBox{position:fixed;left:14px;top:14px;padding:12px 16px;max-width:min(460px,calc(100vw - 28px))}
+#titleBox h1{margin:0;font-size:20px;line-height:1.25;color:#0f5e6e}
+#hint{margin:4px 0 0;font-size:13px;color:#46606e;line-height:1.4}
+#story{position:fixed;left:14px;top:104px;padding:10px 14px;width:min(460px,calc(100vw - 28px))}
+#storyStep{font-size:12px;color:#2a9d8f;font-weight:700;letter-spacing:.3px}
+#storyText{font-size:15px;font-weight:600;margin-top:2px;min-height:21px}
+#storyBar{margin-top:8px;height:6px;border-radius:3px;background:rgba(42,157,143,.15);overflow:hidden}
+#storyFill{display:block;height:100%;width:0;background:linear-gradient(90deg,#2a9d8f,#3a7fd0);border-radius:3px}
+#side{position:fixed;right:14px;top:14px;padding:12px 14px;width:290px}
+.ctl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:14px;font-weight:600}
+.stepper{display:flex;align-items:center;gap:6px}
+.stepper b{min-width:22px;text-align:center;font-size:18px;color:#0f5e6e}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;background:#2a9d8f;color:#fff;font-weight:700;transition:transform .12s,background .2s}
+button:hover{background:#238a7e}
+button:active{transform:scale(.95)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #ffd166;outline-offset:2px}
+button:disabled{cursor:default}
+/* --- เชื่อมต่อ / ตัวกรอง --- */
+#side{max-height:calc(100vh - 90px);overflow:auto}
+.connRow{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px}
+.live{flex:none;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:999px;background:#7b8a96;color:#fff}
+.live.on{background:#d1495b}
+.live.demo{background:#c26a00}
+.statusText{color:#46606e;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btnRow{display:flex;gap:6px;margin-bottom:8px}
+.btnRow button{flex:1;padding:7px 10px;font-size:13px}
+button.alt{background:#3a7fd0}
+button.alt:hover{background:#2f6db7}
+button.ghost{background:#e3ebf0;color:#17303f}
+button.ghost:hover{background:#d3dfe7}
+#filters{display:grid;gap:6px;margin-bottom:8px}
+#filters[hidden],#simCtl[hidden]{display:none}
+.flt{display:grid;grid-template-columns:92px 1fr;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.flt select{font:inherit;font-weight:500;font-size:13px;padding:5px 6px;border-radius:8px;border:1px solid rgba(23,48,63,.2);background:#fff;color:#17303f;min-width:0;width:100%}
+/* toast ที่ซ่อนอยู่ไม่โผล่ทับแผงควบคุม (โดยเฉพาะจอมือถือ) */
+#toast{visibility:hidden;transition:transform .45s cubic-bezier(.2,1.4,.4,1),visibility 0s linear .45s}
+#toast.show{visibility:visible;transition:transform .45s cubic-bezier(.2,1.4,.4,1),visibility 0s}
+/* --- รายการคิวรายจุด (โหมดข้อมูลจริง) --- */
+#queue{position:fixed;left:14px;top:104px;width:min(410px,calc(100vw - 28px));max-height:calc(100vh - 190px);overflow:auto;padding:10px 12px}
+#queue[hidden]{display:none}
+.qHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;margin-bottom:4px}
+.qHead span{font-size:12px;color:#46606e}
+.qPt{border-top:1px solid rgba(23,48,63,.1);padding:7px 0}
+.qPtHead{display:flex;align-items:center;gap:6px;font-size:13.5px}
+/* ชื่อจุดบริการ: บรรทัดเดียวเสมอ ยาวเกินก็ตัดท้ายด้วย … (ชื่อแผนกบางที่ยาวมาก) · คลิกเพื่อกรองดูเฉพาะจุดนั้น */
+.qPtName{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:inherit;font-weight:700;color:inherit;text-align:left;background:none;border:0;padding:0;cursor:pointer}
+.qPtName:hover{text-decoration:underline}
+.qPt.on{background:rgba(42,157,143,.09);border-radius:9px;padding-left:7px;padding-right:7px}
+.qPt.on .qPtName{color:#0f5e6e}
+.qKind{flex:none;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:6px;background:#2a9d8f;color:#fff}
+.qKind.e{background:#3a7fd0}
+.qMeta{font-size:12px;color:#46606e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.chip{display:inline-flex;align-items:baseline;gap:3px;padding:2px 7px;border-radius:7px;font-size:13px;font-weight:700;color:#fff;background:#1f8f52}
+.chip small{font-size:10.5px;font-weight:600;opacity:.92}
+.chip.l1{background:#f2b705;color:#1b2a35}
+.chip.l2{background:#d1495b}
+.chip.busy{background:#fff;color:#0f5e6e;box-shadow:inset 0 0 0 2px #2a9d8f}
+.chip.lab{background:#fff;color:#45569b;box-shadow:inset 0 0 0 2px #8294c9}
+.chip.noslot{font-style:italic}
+.qNote{font-size:11.5px;color:#b35c00;margin-top:4px}
+.qEmpty{font-size:13px;color:#46606e;padding:8px 0}
+/* --- หน้าต่างเชื่อมต่อ / ตั้งค่า --- */
+.ov{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(14,38,52,.38)}
+.ov[hidden]{display:none}
+.ov .card{width:min(500px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:20px 22px}
+.ov h2{margin:0 0 8px;font-size:19px;color:#0f5e6e}
+.ov h3{margin:14px 0 4px;font-size:15px;color:#17303f}
+.ov p{margin:0 0 10px;font-size:14px;color:#46606e;line-height:1.55}
+.ov p.err{color:#b3261e;font-weight:600}
+.ov label.f{display:block;font-size:13px;font-weight:700;margin:10px 0 4px}
+.ov input[type=text],.ov input[type=number],.ov select{font:inherit;font-size:14px;padding:8px 10px;border-radius:9px;border:1px solid rgba(23,48,63,.25);width:100%;background:#fff;color:#17303f}
+.ovBtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.ovBtns button{padding:9px 14px;font-size:14px}
+.ov table{width:100%;border-collapse:collapse;font-size:13px}
+.ov td{padding:4px 3px;border-top:1px solid rgba(23,48,63,.08);vertical-align:middle}
+.ov td.n{color:#46606e;text-align:right;white-space:nowrap}
+.ov td select{padding:4px 6px;font-size:13px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chk{display:flex;gap:8px;align-items:center;font-size:13.5px;margin-top:10px}
+.ov .help{font-size:12px;color:#5d7480;margin:4px 0 0}
+.stepper button{width:32px;height:32px;font-size:20px;line-height:1;padding:0}
+.stepper button.minus{background:#d1495b}
+.stepper button.minus:hover{background:#b83c4d}
+#note{font-size:12px;color:#b35c00;min-height:0;margin:-2px 0 6px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.stats .stat.wide{grid-column:1/3}
+.stat[hidden]{display:none}
+.stat{background:rgba(42,157,143,.08);border-radius:10px;padding:6px 8px;font-size:12px;color:#46606e}
+.stat b{display:block;font-size:19px;color:#17303f}
+.legend{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11.5px;color:#46606e}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.homeRow{margin-top:10px;padding-top:8px;border-top:1px solid rgba(23,48,63,.1)}
+.homeRow[hidden]{display:none}
+.homeLnk{display:inline-block;font-size:12.5px;font-weight:700;color:#0f5e6e;text-decoration:none}
+.homeLnk:hover{text-decoration:underline}
+#bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 12px;white-space:nowrap}
+#bar button{padding:9px 14px;font-size:14px}
+#bar label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+#speed{width:120px;accent-color:#2a9d8f}
+#speedOut{min-width:34px;font-weight:700;color:#0f5e6e}
+#resetView{background:#3a7fd0}
+#resetView:hover{background:#2f6db7}
+#toast{position:fixed;left:50%;top:16px;transform:translate(-50%,-140%);padding:12px 22px;border-radius:999px;background:#1f8f6b;color:#fff;font-weight:700;font-size:17px;box-shadow:0 10px 26px rgba(0,0,0,.2);transition:transform .45s cubic-bezier(.2,1.4,.4,1);pointer-events:none;white-space:nowrap}
+#toast.show{transform:translate(-50%,0)}
+#startPrompt{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(220,231,238,.35);z-index:5}
+#startPrompt.hide{display:none}
+#startPrompt button{font-size:22px;padding:16px 30px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+#startPrompt p{margin:0;background:rgba(255,255,255,.9);padding:6px 14px;border-radius:10px;font-size:14px}
+#fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg,#e6f1f4,#cfe0e8);z-index:10;padding:20px}
+#fail .card{max-width:460px;text-align:center;padding:28px 26px}
+#fail h2{margin:0 0 10px;color:#0f5e6e}
+#fail p{margin:0;color:#46606e;line-height:1.6}
+@media (max-width:820px){
+ #titleBox{padding:9px 12px}
+ #titleBox h1{font-size:17px}
+ #hint{font-size:11.5px}
+ #story{top:auto;bottom:206px;left:10px;width:calc(100vw - 20px);padding:8px 12px}
+ #storyText{font-size:13px}
+ #side{top:auto;bottom:66px;left:10px;right:10px;width:auto;padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;max-height:42vh}
+ .connRow,.btnRow,#filters,#simCtl{grid-column:1/3;margin:0}
+ #simCtl{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+ #queue{top:auto;bottom:calc(42vh + 76px);left:10px;width:calc(100vw - 20px);max-height:24vh;padding:8px 10px}
+ .ctl{font-size:12px;margin:0}
+ #note{grid-column:1/3;margin:0}
+ .stats{grid-column:1/3;grid-template-columns:repeat(4,1fr)}
+ .stat{padding:4px 6px;font-size:10.5px}
+ .stat b{font-size:15px}
+ .legend{display:none}
+ .homeRow{grid-column:1/3;margin-top:2px;padding-top:5px}
+ .homeLnk{font-size:12px}
+ #bar{bottom:10px;gap:8px;padding:6px 8px}
+ #bar button{padding:8px 10px;font-size:13px}
+ #speed{width:80px}
+ #toast{font-size:14px;top:auto;bottom:250px;transform:translate(-50%,400%)}
+ #toast.show{transform:translate(-50%,0)}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="titleBox" class="panel">
+  <h1>ระบบคิวห้องตรวจแพทย์ 3D</h1>
+  <p id="hint">ลากเพื่อหมุนมุมมอง • ล้อเมาส์หรือจีบนิ้วเพื่อซูม • ดับเบิลคลิกเพื่อรีเซ็ตมุมมอง • กด Space เพื่อเล่น/หยุด</p>
+</div>
+
+<div id="story" class="panel" aria-live="polite">
+  <div id="storyStep">ขั้นตอนที่ 1 / 5</div>
+  <div id="storyText"></div>
+  <div id="storyBar"><i id="storyFill"></i></div>
+</div>
+
+<div id="side" class="panel">
+  <div class="connRow"><span id="live" class="live">จำลอง</span><span id="statusText" class="statusText">ยังไม่ได้เชื่อมต่อ HOSxP</span></div>
+  <div class="btnRow"><button id="btnConn" type="button">เชื่อมต่อ BMS Session</button><button id="btnSet" type="button" class="alt" hidden>ตั้งค่า</button></div>
+  <div id="filters" hidden>
+    <label class="flt" for="fClinic">คลินิก<select id="fClinic"></select></label>
+    <label class="flt" for="fTri">จุดซักประวัติ<select id="fTri"></select></label>
+    <label class="flt" for="fRoom">ห้องตรวจ<select id="fRoom"></select></label>
+  </div>
+  <div id="simCtl">
+    <div class="ctl"><span>โต๊ะซักประวัติ (พยาบาล)</span><div class="stepper"><button class="minus" id="tMinus" aria-label="ลดโต๊ะซักประวัติ">−</button><b id="tCount">3</b><button id="tPlus" aria-label="เพิ่มโต๊ะซักประวัติ">+</button></div></div>
+    <div class="ctl"><span>ห้องตรวจแพทย์</span><div class="stepper"><button class="minus" id="rMinus" aria-label="ลดห้องตรวจ">−</button><b id="rCount">3</b><button id="rPlus" aria-label="เพิ่มห้องตรวจ">+</button></div></div>
+  </div>
+  <div id="note"></div>
+  <div class="stats">
+    <div class="stat"><span id="lT">รอซักประวัติ</span><b id="sT">0</b></div>
+    <div class="stat"><span id="lE">รอพบแพทย์</span><b id="sE">0</b></div>
+    <div class="stat"><span id="lS">ที่จุดบริการ</span><b id="sS">0</b></div>
+    <div class="stat"><span id="lD">กลับบ้านแล้ว</span><b id="sD">0</b></div>
+    <div class="stat wide" id="statLab" hidden><span>รอผลตรวจ (ยังอยู่ แต่ไม่ได้รอหมอ)</span><b id="sL">0</b></div>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="homeRow" id="homeRow" hidden><a id="homeLnk" class="homeLnk" href="#" title="ไปหน้ารวมแอปแสดงผล 3 มิติ">☰ หน้ารวมแอปแสดงผล 3 มิติ</a></div>
+</div>
+
+<div id="queue" class="panel" hidden aria-label="คิวคนไข้แยกตามจุดบริการ">
+  <div class="qHead"><b>คิวคนไข้ ณ จุดบริการ</b><span id="qTime"></span></div>
+  <div id="qBody"></div>
+</div>
+
+<div id="ovConn" class="ov" hidden>
+  <div class="card panel" role="dialog" aria-modal="true" aria-labelledby="connTitle">
+    <h2 id="connTitle">เชื่อมต่อ HOSxP</h2>
+    <p id="connMsg">วาง BMS Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อแสดงคิวจริงของวันนี้</p>
+    <label class="f" for="sid">BMS Session ID</label>
+    <input id="sid" type="text" autocomplete="off" spellcheck="false" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX">
+    <p class="help">ส่งมาทางที่อยู่หน้าเว็บก็ได้: <code>?bms-session-id=…</code> · อ่านข้อมูลอย่างเดียว ไม่แก้ไขอะไรใน HOSxP</p>
+    <div class="ovBtns">
+      <button id="connGo" type="button">เชื่อมต่อ</button>
+      <button id="connDemo" type="button" class="alt">ดูตัวอย่าง (ข้อมูลจำลอง)</button>
+      <button id="connClose" type="button" class="ghost">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<div id="ovSet" class="ov" hidden>
+  <div class="card panel" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle">ตั้งค่า</h2>
+    <h3>สีตามเวลารอ</h3>
+    <div class="row2">
+      <label class="f" for="thY">เหลือง ตั้งแต่ (นาที)<input id="thY" type="number" min="1" max="1440" step="1"></label>
+      <label class="f" for="thR">แดง ตั้งแต่ (นาที)<input id="thR" type="number" min="2" max="1440" step="1"></label>
+    </div>
+    <p class="help">นับจากเวลาที่คนไข้ถูกส่งมาจุดนั้น (ovst.cur_dep_time) ถ้าฐานไม่มีคอลัมน์นี้จะนับจากที่หน้านี้เห็นคนไข้ย้ายจุด</p>
+    <div id="setLive">
+      <label class="f" for="every">ดึงข้อมูลใหม่ทุก</label>
+      <select id="every"><option value="10">10 วินาที</option><option value="20">20 วินาที</option><option value="30">30 วินาที</option><option value="60">60 วินาที</option></select>
+      <label class="chk"><input id="slotOnly" type="checkbox"> แสดงเฉพาะคนไข้ที่มีคิวใน opd_qs_slot</label>
+      <label class="chk"><input id="stFilter" type="checkbox"> ตัดคนที่พ้นจุดนั้นไปแล้วออก (opd_dep_queue + ovst.ovstost)</label>
+      <label class="chk"><input id="labSep" type="checkbox"> แยก “รอผลตรวจ” ออกจากคิวรอพบแพทย์</label>
+      <label class="f" for="staleH">ค้างเกินกี่ชั่วโมงถือว่าไม่อยู่แล้ว<input id="staleH" type="number" min="0" max="48" step="0.5"></label>
+      <p class="help">บางโรงพยาบาลไม่ปิดคิวแผนกและไม่อัปเดตสถานะเมื่อคนไข้กลับ คนเหล่านี้จะค้างอยู่ในคิวข้ามวัน · ใส่ 0 = ไม่ตัดใครออกด้วยเวลา</p>
+      <p class="help" id="stHelp"></p>
+      <h3>แผนกใน HOSxP → จุดบนจอ</h3>
+      <p class="help">ระบบเดาจากชื่อแผนก (ซักประวัติ/คัดกรอง = จุดซักประวัติ · ห้องตรวจ/พบแพทย์ = ห้องตรวจ) แก้ได้ที่นี่ จำแยกตามฐานข้อมูล</p>
+      <table><tbody id="mapBody"></tbody></table>
+    </div>
+    <div class="ovBtns"><button id="setClose" type="button">เสร็จ</button></div>
+  </div>
+</div>
+
+<div id="bar" class="panel">
+  <button id="play" aria-pressed="false">⏸ หยุดชั่วคราว</button>
+  <label for="speed">ความเร็ว <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1"><output id="speedOut">1×</output></label>
+  <button id="resetView">รีเซ็ตมุมมอง</button>
+</div>
+
+<div id="toast" role="status" aria-live="assertive"></div>
+
+<div id="startPrompt" class="hide">
+  <button id="startBtn">▶ เริ่มเล่นแอนิเมชัน</button>
+  <p>ระบบของคุณตั้งค่าลดการเคลื่อนไหวไว้ ฉากจึงหยุดอยู่ กดปุ่มเพื่อเริ่มเล่น</p>
+</div>
+
+<div id="fail"><div class="card panel"><h2>ไม่สามารถแสดงฉาก 3 มิติได้</h2><p id="failMsg">เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับ WebGL กรุณาเปิดด้วยเบราว์เซอร์รุ่นใหม่ เช่น Chrome, Edge, Firefox หรือ Safari และตรวจสอบว่าเปิดใช้การเร่งความเร็วด้วยฮาร์ดแวร์แล้ว</p></div></div>
+
+<script>
+setTimeout(function(){
+  if(!window.__opdStarted){
+    var f=document.getElementById('fail');
+    document.getElementById('failMsg').textContent='ไม่สามารถโหลดไฟล์ ./lib/three.module.js ได้ กรุณาเปิดหน้านี้ผ่านเว็บเซิร์ฟเวอร์ภายในเครื่อง (เช่น Live Server) แล้วลองใหม่อีกครั้ง';
+    f.style.display='flex';
+  }
+},6000);
+</script>
+
+<script type="module">
+import * as THREE from "./lib/three.module.js";
+window.__opdStarted = true;
+
+const $ = (id) => document.getElementById(id);
+function showFail(msg){ if(msg) $('failMsg').textContent = msg; $('fail').style.display = 'flex'; }
+function hasWebGL(){
+  try{ const c=document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); }
+  catch(e){ return false; }
+}
+
+if(!hasWebGL()){ showFail(); }
+else{
+  try{ main(); }
+  catch(err){ console.error(err); showFail('ขออภัย ไม่สามารถสร้างฉาก 3 มิติบนอุปกรณ์นี้ได้ ลองรีเฟรชหน้าหรือเปิดด้วยเบราว์เซอร์รุ่นใหม่'); }
+}
+
+function main(){
+  const PI=Math.PI, HP=PI/2, TAU=PI*2;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const easeInOutCubic=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  const easeOutBack=t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);};
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+  const V3=(x,z)=>new THREE.Vector3(x,0,z);
+  const FONT="'Sarabun','Noto Sans Thai','Leelawadee UI','Leelawadee','Tahoma','Thonburi',sans-serif";
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Renderer / scene ---------- */
+  const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  $('app').appendChild(renderer.domElement);
+  const canvas = renderer.domElement;
+  canvas.setAttribute('tabindex','0');
+  canvas.setAttribute('aria-label','ฉาก 3 มิติ แผนกผู้ป่วยนอก');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xdce7ee);
+  scene.fog = new THREE.Fog(0xdce7ee, 62, 130);
+  const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.5, 320);
+
+  const hemi = new THREE.HemisphereLight(0xfafcff, 0xaebcc6, 1.35);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff3e4, 2.3);
+  sun.position.set(16, 30, 14);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const sc = sun.shadow.camera; sc.left=-30; sc.right=30; sc.top=30; sc.bottom=-30; sc.near=1; sc.far=90;
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+  scene.add(sun); scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0xdcecff, 0.55);
+  fill.position.set(-20, 18, -10);
+  scene.add(fill);
+
+  /* ---------- Textures ---------- */
+  const loader = new THREE.TextureLoader();
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  function loadTex(url, rx, ry, fallback){
+    const t = loader.load(url, undefined, undefined, () => {
+      const c=document.createElement('canvas'); c.width=c.height=4;
+      const g=c.getContext('2d'); g.fillStyle=fallback; g.fillRect(0,0,4,4);
+      t.image=c; t.needsUpdate=true;
+    });
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    t.anisotropy = maxAniso;
+    return t;
+  }
+  const FLOOR='assets/hospital-floor-tile.png', WALL='assets/hospital-wall-panel.png', WOOD='assets/light-wood-desk.png';
+  const floorTex = loadTex(FLOOR, 11, 7, '#dfe5e8');
+  const slabTex = loadTex(FLOOR, 3, 2, '#dfe5e8');
+  const wallBackTex = loadTex(WALL, 11, 1.12, '#eef2f3');
+  const wallSideTex = loadTex(WALL, 7, 1.12, '#eef2f3');
+  const partTex = loadTex(WALL, 1.5, 0.62, '#eef2f3');
+  const partLowTex = loadTex(WALL, 0.55, 0.28, '#eef2f3');
+  const frontWallTex = loadTex(WALL, 4.7, 0.22, '#eef2f3');
+  const woodTex = loadTex(WOOD, 2, 1, '#d9b98f');
+  const woodCounterTex = loadTex(WOOD, 1, 3, '#d9b98f');
+
+  /* ---------- Materials ---------- */
+  const std=(color, rough=0.7, extra={})=>new THREE.MeshStandardMaterial(Object.assign({color, roughness:rough, metalness:0}, extra));
+  const M = {
+    floor: new THREE.MeshStandardMaterial({map:floorTex, roughness:0.5, metalness:0.02}),
+    slab: new THREE.MeshStandardMaterial({map:slabTex, color:0xc9d3d9, roughness:0.7}),
+    wall: new THREE.MeshStandardMaterial({map:wallBackTex, roughness:0.9}),
+    wallSide: new THREE.MeshStandardMaterial({map:wallSideTex, roughness:0.9}),
+    part: new THREE.MeshStandardMaterial({map:partTex, roughness:0.85}),
+    partLow: new THREE.MeshStandardMaterial({map:partLowTex, roughness:0.85}),
+    wallFront: new THREE.MeshStandardMaterial({map:frontWallTex, roughness:0.85}),
+    wood: new THREE.MeshStandardMaterial({map:woodTex, roughness:0.55}),
+    woodCounter: new THREE.MeshStandardMaterial({map:woodCounterTex, roughness:0.55}),
+    white: std('#f2f5f7',0.6),
+    trim: std('#2c8c99',0.5),
+    dark: std('#24313b',0.5),
+    metal: std('#a9b4bd',0.35,{metalness:0.6}),
+    screen: std('#0d2230',0.3,{emissive:'#2a8fb8', emissiveIntensity:0.55}),
+    glass: new THREE.MeshStandardMaterial({color:0xcfeaf3, transparent:true, opacity:0.28, roughness:0.05, metalness:0.1, depthWrite:false}),
+    mattress: std('#bfe1ee',0.8),
+    chairWait: std('#2f8fae',0.6),
+    chairStaff: std('#40505c',0.6),
+    chairPatient: std('#e39b3d',0.6),
+    divider: std('#d8e8ec',0.7),
+    signBack: std('#1e2f3a',0.6),
+    pot: std('#efe7da',0.7),
+    leaf: std('#4c9a5a',0.8),
+    leaf2: std('#6bb36f',0.8),
+    shoe: std('#2a2a2e',0.7),
+    mat: std('#3f4e57',0.95),
+    ground: std('#cbd6dc',1),
+    cuff: std('#2f5f8a',0.7),
+  };
+
+  /* ---------- Geometry helpers ---------- */
+  const geoCache = new Map();
+  function boxG(w,h,d){ const k='b'+w+'|'+h+'|'+d; let g=geoCache.get(k); if(!g){ g=new THREE.BoxGeometry(w,h,d); geoCache.set(k,g);} return g; }
+  function cylG(rt,rb,h,s=12){ const k='c'+rt+'|'+rb+'|'+h+'|'+s; let g=geoCache.get(k); if(!g){ g=new THREE.CylinderGeometry(rt,rb,h,s); geoCache.set(k,g);} return g; }
+  function add(parent, geo, mat, x=0,y=0,z=0, cast=true, recv=true){
+    const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=cast; m.receiveShadow=recv; parent.add(m); return m;
+  }
+
+  /* ---------- Canvas helpers ---------- */
+  function canvasTex(w,h,draw){
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const g=c.getContext('2d'); if(draw) draw(g,w,h);
+    const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=maxAniso;
+    return {c,g,t};
+  }
+  function rr(g,x,y,w,h,r){
+    g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+  }
+  function arrow(g,cx,cy,s,dir,color){
+    const ang={right:0,down:HP,left:PI,up:-HP}[dir]||0;
+    g.save(); g.translate(cx,cy); g.rotate(ang); g.fillStyle=color; g.beginPath();
+    g.moveTo(s*0.5,0); g.lineTo(0,-s*0.45); g.lineTo(0,-s*0.17); g.lineTo(-s*0.5,-s*0.17); g.lineTo(-s*0.5,s*0.17); g.lineTo(0,s*0.17); g.lineTo(0,s*0.45);
+    g.closePath(); g.fill(); g.restore();
+  }
+  function fitFont(g, text, weight, size, maxW){
+    let fs=size; g.font=`${weight} ${fs}px ${FONT}`;
+    while(g.measureText(text).width>maxW && fs>10){ fs-=2; g.font=`${weight} ${fs}px ${FONT}`; }
+    return fs;
+  }
+  function panelDraw({bg='#1d6f84', accent='#ffd166', title, sub, arrowDir}){
+    return (g,W,H)=>{
+      g.save(); rr(g,0,0,W,H,Math.min(W,H)*0.14); g.clip();
+      g.fillStyle=bg; g.fillRect(0,0,W,H);
+      g.fillStyle=accent; g.fillRect(0,H*0.92,W,H*0.08);
+      g.restore();
+      let x=W*0.05;
+      if(arrowDir){
+        const s=H*0.62;
+        g.fillStyle='rgba(255,255,255,0.2)'; g.beginPath(); g.arc(x+s/2,H*0.46,s/2,0,TAU); g.fill();
+        arrow(g,x+s/2,H*0.46,s*0.62,arrowDir,'#fff');
+        x+=s+W*0.03;
+      }
+      const maxW=W-x-W*0.04;
+      g.textBaseline='middle'; g.textAlign='left'; g.fillStyle='#fff';
+      fitFont(g,title,700,H*(sub?0.38:0.5),maxW);
+      g.fillText(title,x,sub?H*0.34:H*0.47);
+      if(sub){ g.fillStyle='rgba(255,255,255,0.88)'; fitFont(g,sub,500,H*0.2,maxW); g.fillText(sub,x,H*0.7); }
+    };
+  }
+  function makeSign(w,h,draw,rods=0){
+    const cw=1024, ch=Math.max(64,Math.round(1024*h/w));
+    const ct=canvasTex(cw,ch,draw);
+    const grp=new THREE.Group();
+    add(grp, boxG(w+0.08,h+0.08,0.05), M.signBack, 0,0,-0.03, true,false);
+    const pm=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:ct.t, toneMapped:false}));
+    pm.position.z=0.002; grp.add(pm);
+    if(rods>0){ for(const sx of [-w*0.38,w*0.38]) add(grp, cylG(0.015,0.015,rods,6), M.metal, sx, h/2+rods/2, -0.03, false,false); }
+    grp.userData.ct=ct;   // เก็บไว้วาดป้ายใหม่ (ชื่อจุดจาก HOSxP)
+    return grp;
+  }
+  function redrawSign(sign, opts){
+    const {c,g,t}=sign.userData.ct;
+    g.clearRect(0,0,c.width,c.height);
+    panelDraw(opts)(g,c.width,c.height);
+    t.needsUpdate=true;
+  }
+
+  /* ---------- Environment ---------- */
+  const ground = add(scene, new THREE.PlaneGeometry(260,260), M.ground, 0,-0.02,0, false,false);
+  ground.rotation.x=-HP;
+  const floor = add(scene, new THREE.PlaneGeometry(44,28), M.floor, 0,0,0, false,true);
+  floor.rotation.x=-HP;
+  const slab = add(scene, new THREE.PlaneGeometry(10,6), M.slab, 0,0.005,17, false,true);
+  slab.rotation.x=-HP;
+  const doormat = add(scene, new THREE.PlaneGeometry(4.2,1.6), M.mat, 0,0.012,15, false,true);
+  doormat.rotation.x=-HP;
+
+  add(scene, boxG(44.6,4.5,0.3), M.wall, 0,2.25,-14.15, true,true);
+  add(scene, boxG(0.3,4.5,28.3), M.wallSide, -22.15,2.25,0, true,true);
+  add(scene, boxG(0.3,4.5,28.3), M.wallSide, 22.15,2.25,0, true,true);
+  add(scene, boxG(18.8,0.9,0.2), M.wallFront, -12.6,0.45,14.05, true,true);
+  add(scene, boxG(18.8,0.9,0.2), M.wallFront, 12.6,0.45,14.05, true,true);
+  // skirting stripe
+  add(scene, boxG(44,0.12,0.04), M.trim, 0,0.06,-13.98, false,false);
+
+  // Entrance gate
+  for(const sx of [-3.2,3.2]) add(scene, boxG(0.35,3.4,0.35), M.trim, sx,1.7,14.05);
+  add(scene, boxG(6.75,0.8,0.35), M.trim, 0,3.6,14.05);
+  const gateSign = makeSign(6.1,0.66, panelDraw({bg:'#14596a', accent:'#e07a5f', title:'ทางเข้า - ออก  •  กลับบ้าน'}));
+  gateSign.position.set(0,3.6,14.27); scene.add(gateSign);
+
+  // Plants
+  function plant(x,z,s=1){
+    const g=new THREE.Group(); g.position.set(x,0,z); g.scale.setScalar(s); scene.add(g);
+    add(g, cylG(0.32,0.25,0.6,14), M.pot, 0,0.3,0);
+    const f1=add(g, new THREE.SphereGeometry(0.55,14,10), M.leaf, 0,1.0,0); f1.scale.set(1,1.2,1);
+    add(g, new THREE.SphereGeometry(0.38,12,8), M.leaf2, 0.22,1.45,0.1, true,false);
+    add(g, new THREE.SphereGeometry(0.32,12,8), M.leaf2, -0.25,1.3,-0.15, true,false);
+  }
+  plant(-21,13); plant(21,13); plant(-21,-13); plant(4.6,13.3,0.8); plant(-15.8,12.9,0.8);
+
+  /* ---------- ถนนรอบโรงพยาบาล · ลานรับส่งหน้าอาคาร ----------
+     วงถนนล้อมอาคาร (อาคารกว้าง x -22..22 · z -14..14) · รถวิ่งชิดซ้ายแบบไทย
+     เลนใน = วิ่งตามลำดับจุดของเส้นกึ่งกลาง · เลนนอก = วิ่งย้อนลำดับ
+     ลานรับส่งอยู่หน้าประตู (z ≈ 21) ต่อจากถนนทั้งสองฝั่ง: เข้าทางซ้าย ออกทางขวา */
+  const RD={X:34, zF:30, zB:-26, r:9, half:3.6, lane:1.8};
+  const V2=(x,z)=>new THREE.Vector2(x,z);
+  function roadCenterPts(){
+    const p=[], X=RD.X, zF=RD.zF, zB=RD.zB, r=RD.r, A=10;
+    const put=(x,z)=>{ const l=p[p.length-1]; if(!l||Math.abs(l.x-x)>1e-4||Math.abs(l.y-z)>1e-4) p.push(V2(x,z)); };
+    const arc=(cx,cz,a0,a1)=>{ for(let i=0;i<=A;i++){ const a=a0+(a1-a0)*i/A; put(cx+r*Math.cos(a), cz+r*Math.sin(a)); } };
+    put(-X+r,zF); put(X-r,zF);
+    arc(X-r, zF-r, HP, 0);      put(X, zB+r);
+    arc(X-r, zB+r, 0, -HP);     put(-X+r, zB);
+    arc(-X+r, zB+r, -HP, -PI);  put(-X, zF-r);
+    arc(-X+r, zF-r, PI, HP);
+    if(p.length>1){ const a=p[0], b=p[p.length-1]; if(Math.abs(a.x-b.x)<1e-4&&Math.abs(a.y-b.y)<1e-4) p.pop(); }
+    return p;
+  }
+  /* แผ่นถนนจากเส้นกึ่งกลาง (ribbon) · uv วิ่งตามความยาวจริง ลายเส้นจึงไม่ยืด */
+  function ribbonGeo(pts, half, closed, tileM){
+    const n=pts.length, pos=[], uv=[], nor=[], idx=[];
+    const cum=[0];
+    for(let i=1;i<n;i++) cum.push(cum[i-1]+pts[i].distanceTo(pts[i-1]));
+    if(closed) cum.push(cum[n-1]+pts[0].distanceTo(pts[n-1]));
+    for(let i=0;i<n;i++){
+      const a=pts[(i-1+n)%n], b=pts[i], c=pts[(i+1)%n];
+      let tx,tz;
+      if(closed||(i>0&&i<n-1)){ tx=c.x-a.x; tz=c.y-a.y; }
+      else if(i===0){ tx=c.x-b.x; tz=c.y-b.y; }
+      else { tx=b.x-a.x; tz=b.y-a.y; }
+      const l=Math.hypot(tx,tz)||1; tx/=l; tz/=l;
+      const nx=tz, nz=-tx, u=cum[i]/tileM;
+      pos.push(b.x+nx*half, 0, b.y+nz*half, b.x-nx*half, 0, b.y-nz*half);
+      uv.push(u,0, u,1);
+      nor.push(0,1,0, 0,1,0);
+    }
+    const last=closed?n:n-1;
+    for(let i=0;i<last;i++){
+      const a=i*2, b=((i+1)%n)*2;
+      idx.push(a,a+1,b, b,a+1,b+1);     // หันหน้าขึ้นฟ้า (ไม่งั้นมองจากข้างบนไม่เห็นถนน)
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor,3));
+    g.setIndex(idx);
+    return g;
+  }
+  const roadTex=canvasTex(128,128,(g,W,H)=>{
+    g.fillStyle='#4b5157'; g.fillRect(0,0,W,H);
+    g.fillStyle='rgba(255,255,255,0.78)';
+    g.fillRect(0,2,W,4); g.fillRect(0,H-6,W,4);           // เส้นขอบถนน
+    g.fillRect(0,H/2-2,W*0.45,4);                          // เส้นแบ่งเลนแบบประ
+  }).t;
+  roadTex.wrapS=roadTex.wrapT=THREE.RepeatWrapping;
+  const M_ROAD=new THREE.MeshStandardMaterial({map:roadTex, roughness:0.95});
+  const M_DRIVE=std('#555c63',0.95);
+  const RC=(()=>{
+    const pts=roadCenterPts(), n=pts.length, cum=[0];
+    for(let i=1;i<n;i++) cum.push(cum[i-1]+pts[i].distanceTo(pts[i-1]));
+    cum.push(cum[n-1]+pts[0].distanceTo(pts[n-1]));
+    return {pts,n,cum,L:cum[n]};
+  })();
+  {
+    const road=new THREE.Mesh(ribbonGeo(RC.pts, RD.half, true, 6), M_ROAD);
+    road.position.y=0.012; road.receiveShadow=true; scene.add(road);
+  }
+  /* ลานรับส่งหน้าอาคาร: เข้าจากถนนฝั่งซ้าย → ผ่านหน้าประตู → ออกฝั่งขวา */
+  const DW=[V2(-30,26.0),V2(-23,25.4),V2(-18,24.0),V2(-15.4,21.6),V2(-14.3,19.0),V2(-10,17.8),
+            V2(0,17.6),V2(10,17.8),V2(14.3,19.0),V2(15.4,21.6),V2(18,24.0),V2(23,25.4),V2(30,26.0)];
+  {
+    const dw=new THREE.Mesh(ribbonGeo(DW, 2.4, false, 6), M_DRIVE);
+    dw.position.y=0.013; dw.receiveShadow=true; scene.add(dw);
+  }
+  const DW_IN=DW.slice(0,6).map(v=>V3(v.x,v.y-1.2));
+  const DW_OUT=DW.slice(7).map(v=>V3(v.x,v.y-1.2));
+  /* ช่องจอดรับ-ส่งหน้าประตู (คนไข้เข้า-ออกที่ x ≈ 0.3, z = 14.9)
+     มีช่องเดียว เพราะช่วงที่มองเห็นจริงในมุมกล้องตั้งต้นกว้างแค่นี้ (ซ้ายมือมีรายการคิว ล่างมีแถบปุ่มบัง)
+     คันไหนมาก่อนได้ก่อน อีกคันไม่ถูกเรียก คนไข้ก็เดินเข้า-ออกเองตามปกติ */
+  const BAY={ busy:null, spot:V3(5.5,16.4) };
+
+  /* ---------- รถ ---------- */
+  const VM={
+    glass: std('#2b3b47',0.25,{metalness:0.35}),
+    tyre: std('#191d21',0.95),
+    chrome: std('#b7c1c9',0.35,{metalness:0.7}),
+    white: std('#f3f6f8',0.5),
+    red: std('#cf3b4a',0.5),
+    dark: std('#2a3139',0.6),
+    lampF: new THREE.MeshStandardMaterial({color:'#fff6d8', emissive:'#ffeab0', emissiveIntensity:0.5, roughness:0.3}),
+    lampR: new THREE.MeshStandardMaterial({color:'#d1495b', emissive:'#ff2a3a', emissiveIntensity:0.5, roughness:0.3}),
+    beaconR: new THREE.MeshStandardMaterial({color:'#ff3b46', emissive:'#ff2030', emissiveIntensity:1.4, roughness:0.4}),
+    beaconB: new THREE.MeshStandardMaterial({color:'#3f7bff', emissive:'#2f6bff', emissiveIntensity:1.4, roughness:0.4}),
+  };
+  const CAR_PAINT=['#dfe4e8','#333f4b','#b23a48','#2a6f97','#dba13c','#3f8f6a','#7d8893','#f0f2f4'].map(c=>std(c,0.45,{metalness:0.25}));
+  const vehs=[];
+  function vWheels(g, wb, track, r){
+    const ws=[];
+    for(const z of [wb,-wb]) for(const x of [-track,track]){
+      const w=new THREE.Mesh(cylG(r,r,0.2,14), VM.tyre);
+      w.rotation.z=HP; w.position.set(x,r,z); g.add(w); ws.push(w);
+    }
+    return ws;
+  }
+  /* รถหันหน้าไปทาง +z (เหมือนคน) → yaw = atan2(dx,dz) ใช้ร่วมกันได้ */
+  function buildVeh(kind){
+    const g=new THREE.Group(); let wheels, len=4.4;
+    const paint=pick(CAR_PAINT);
+    const put=(gw,gh,gd,m,x,y,z)=>{ const o=new THREE.Mesh(boxG(gw,gh,gd),m); o.position.set(x,y,z); o.castShadow=true; g.add(o); return o; };
+    if(kind==='bike'){
+      len=2.0;
+      wheels=[];
+      for(const z of [0.62,-0.62]){ const w=new THREE.Mesh(cylG(0.3,0.3,0.12,14), VM.tyre); w.rotation.z=HP; w.position.set(0,0.3,z); g.add(w); wheels.push(w); }
+      put(0.3,0.3,1.5,paint,0,0.62,0); put(0.36,0.12,0.62,VM.dark,0,0.84,-0.2);
+      put(0.52,0.07,0.07,VM.chrome,0,1.0,0.5);
+      const rider=pick(SHIRT);
+      put(0.36,0.52,0.24,std(rider,0.7),0,1.18,-0.1);
+      const head=new THREE.Mesh(new THREE.SphereGeometry(0.15,12,10), VM.white); head.position.set(0,1.57,-0.06); head.castShadow=true; g.add(head);
+      put(0.16,0.34,0.2,VM.dark,-0.2,0.95,0.12); put(0.16,0.34,0.2,VM.dark,0.2,0.95,0.12);
+    } else if(kind==='amb'){
+      len=5.4;
+      wheels=vWheels(g,1.65,0.86,0.36);
+      put(2.0,1.5,3.6,VM.white,0,1.35,-0.8);                 // ห้องพยาบาลท้ายรถ
+      put(1.92,0.95,1.9,VM.white,0,0.98,1.75);               // หัวเก๋ง
+      put(1.8,0.5,0.14,VM.glass,0,1.62,2.6);                 // กระจกหน้า
+      put(0.12,0.5,1.6,VM.glass,-0.95,1.6,1.75); put(0.12,0.5,1.6,VM.glass,0.95,1.6,1.75);
+      put(2.03,0.26,4.9,VM.red,0,0.78,0.2);                  // แถบแดงข้างรถ
+      put(0.55,0.12,0.3,VM.dark,0,2.15,0.9);                 // คานไฟ (ไฟอยู่สองข้าง ไม่งั้นจมอยู่ในคาน)
+      const bR=put(0.4,0.2,0.32,VM.beaconR,-0.46,2.19,0.9), bB=put(0.4,0.2,0.32,VM.beaconB,0.46,2.19,0.9);
+      for(const sx of [-1.02,1.02]){                          // กากบาทแดงข้างรถ
+        put(0.04,0.86,0.3,VM.red,sx,1.5,-1.0); put(0.04,0.3,0.86,VM.red,sx,1.5,-1.0);
+      }
+      put(0.3,0.18,0.1,VM.lampF,-0.7,0.78,2.72); put(0.3,0.18,0.1,VM.lampF,0.7,0.78,2.72);
+      g.userData.beacon=[bR,bB];
+    } else if(kind==='pickup'){
+      len=5.0;
+      wheels=vWheels(g,1.6,0.84,0.37);
+      put(1.84,0.52,4.8,paint,0,0.62,0);
+      put(1.7,0.66,1.9,paint,0,1.2,1.1);
+      put(1.74,0.5,0.12,VM.glass,0,1.26,2.02); put(0.12,0.5,1.5,VM.glass,-0.86,1.26,1.1); put(0.12,0.5,1.5,VM.glass,0.86,1.26,1.1);
+      put(1.8,0.44,0.12,paint,0,1.06,-2.3);                  // ท้ายกระบะ
+      put(0.12,0.44,2.4,paint,-0.86,1.06,-1.1); put(0.12,0.44,2.4,paint,0.86,1.06,-1.1);
+      put(0.3,0.16,0.1,VM.lampF,-0.66,0.72,2.42); put(0.3,0.16,0.1,VM.lampF,0.66,0.72,2.42);
+      put(0.3,0.16,0.1,VM.lampR,-0.66,0.8,-2.36); put(0.3,0.16,0.1,VM.lampR,0.66,0.8,-2.36);
+    } else if(kind==='van'){
+      len=5.2;
+      wheels=vWheels(g,1.6,0.84,0.35);
+      put(1.94,1.44,5.0,paint,0,1.2,0);
+      put(1.84,0.54,0.14,VM.glass,0,1.62,2.46);
+      put(0.12,0.46,3.0,VM.glass,-0.92,1.58,0.3); put(0.12,0.46,3.0,VM.glass,0.92,1.58,0.3);
+      put(0.3,0.16,0.1,VM.lampF,-0.66,0.72,2.52); put(0.3,0.16,0.1,VM.lampF,0.66,0.72,2.52);
+    } else {
+      len=4.4;
+      wheels=vWheels(g,1.42,0.8,0.33);
+      put(1.78,0.58,4.3,paint,0,0.62,0);
+      put(1.6,0.56,2.1,paint,0,1.16,-0.2);
+      put(1.66,0.4,2.0,VM.glass,0,1.2,-0.18);
+      put(0.3,0.15,0.1,VM.lampF,-0.6,0.7,2.18); put(0.3,0.15,0.1,VM.lampF,0.6,0.7,2.18);
+      put(0.3,0.15,0.1,VM.lampR,-0.6,0.74,-2.12); put(0.3,0.15,0.1,VM.lampR,0.6,0.74,-2.12);
+    }
+    const v={obj:g, wheels, kind, len, spin:0, yaw:0, yaw0:0, path:null, waitT:0, cb:null, dir:0, d:0, v:0, vMax:0};
+    g.userData.v=v;
+    scene.add(g); vehs.push(v);
+    return v;
+  }
+  function killVeh(v){
+    scene.remove(v.obj);
+    const i=vehs.indexOf(v); if(i>=0) vehs.splice(i,1);
+    if(v.slot&&v.slot.busy===v) v.slot.busy=null;
+  }
+  /* ---- วิ่งวนบนถนน ---- */
+  function loopAt(d,dir){
+    const L=RC.L; let s=((d%L)+L)%L;
+    if(dir<0) s=L-s;
+    let lo=0, hi=RC.n-1;
+    while(lo<hi){ const mid=(lo+hi+1)>>1; if(RC.cum[mid]<=s) lo=mid; else hi=mid-1; }
+    const a=RC.pts[lo], b=RC.pts[(lo+1)%RC.n], segL=Math.max(1e-6,RC.cum[lo+1]-RC.cum[lo]);
+    const f=(s-RC.cum[lo])/segL;
+    let tx=(b.x-a.x)/segL, tz=(b.y-a.y)/segL;
+    if(dir<0){ tx=-tx; tz=-tz; }
+    return {x:a.x+(b.x-a.x)*f+tz*RD.lane, z:a.y+(b.y-a.y)*f-tx*RD.lane, yaw:Math.atan2(tx,tz)};
+  }
+  function addTraffic(n){
+    const kinds=['sedan','sedan','pickup','bike','van','sedan','pickup','bike'];
+    for(let i=0;i<n;i++){
+      const v=buildVeh(kinds[i%kinds.length]);
+      v.dir=i%2?1:-1; v.d=(RC.L/n)*i+rand(0,6);
+      v.vMax=v.kind==='bike'?rand(9,12):rand(6.5,10.5); v.v=v.vMax;
+      for(const m of v.obj.children) m.castShadow=false;
+      const q=loopAt(v.d,v.dir); v.obj.position.set(q.x,0,q.z); v.yaw=v.yaw0=q.yaw; v.obj.rotation.y=q.yaw;
+    }
+  }
+  function trafficStep(dt){
+    for(const dir of [1,-1]){
+      const list=vehs.filter(c=>c.dir===dir).sort((a,b)=>a.d-b.d);
+      for(let i=0;i<list.length;i++){
+        const c=list[i];
+        let gap=1e3;
+        if(list.length>1){ const nx=list[(i+1)%list.length]; gap=((nx.d-c.d)%RC.L+RC.L)%RC.L - nx.len*0.5 - c.len*0.5; }
+        const want=gap<6?c.vMax*clamp((gap-1.2)/4.8,0,1):c.vMax;
+        c.v+=clamp(want-c.v, -16*dt, 4*dt);
+        c.d+=c.v*dt; c.spin+=c.v*dt/0.34;
+        const q=loopAt(c.d,c.dir);
+        c.obj.position.set(q.x,0,q.z); c.yaw=c.yaw0=q.yaw; c.obj.rotation.y=q.yaw;
+        for(const w of c.wheels) w.rotation.x=c.spin;
+      }
+    }
+  }
+  /* ---- รถที่แวะลานรับส่ง (ใช้เส้นทาง + โปรไฟล์ความเร็วชุดเดียวกับคนเดิน) ---- */
+  function vehPath(v,pts,speed,cb){
+    v.path=makePath([v.obj.position.clone(), ...pts], speed); v.waitT=0; v.cb=cb;
+  }
+  function vehWait(v,sec,cb){ v.path=null; v.waitT=sec; v.cb=cb; }
+  function vehStep(v,dt){
+    if(v.path){
+      const p=v.path, prev=p.d;
+      p.t+=dt;
+      const d=profile(p,p.t); p.d=d;
+      while(p.seg<p.pts.length-2 && d>p.cum[p.seg+1]) p.seg++;
+      const a0=p.pts[p.seg], a1=p.pts[p.seg+1], segL=p.cum[p.seg+1]-p.cum[p.seg];
+      const f=segL>1e-6?(d-p.cum[p.seg])/segL:1;
+      v.obj.position.lerpVectors(a0,a1,Math.min(1,f));
+      const dx=a1.x-a0.x, dz=a1.z-a0.z;
+      if(dx*dx+dz*dz>1e-6) v.yaw0=Math.atan2(dx,dz);
+      v.spin+=(d-prev)/0.34;
+      if(p.t>=p.T){ v.obj.position.copy(p.pts[p.pts.length-1]); v.path=null; const cb=v.cb; v.cb=null; if(cb) cb(); }
+    } else if(v.waitT>0){
+      v.waitT-=dt;
+      if(v.waitT<=0){ const cb=v.cb; v.cb=null; if(cb) cb(); }
+    }
+    let dy=v.yaw0-v.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    v.yaw+=dy*Math.min(1,dt*4); v.obj.rotation.y=v.yaw;
+    for(const w of v.wheels) w.rotation.x=v.spin;
+  }
+  /* เรียกรถเข้าลานหน้าอาคาร — ช่องจอดไม่ว่างก็ไม่เรียก (คนไข้เดินเข้า-ออกเองตามปกติ) */
+  function callVeh(kind, onArrive, hold){
+    if(BAY.busy) return null;
+    const v=buildVeh(kind==='amb'?'amb':pick(['sedan','sedan','pickup','van']));
+    BAY.busy=v; v.slot=BAY; v.dir=0; v.arrived=false; v.boarded=false; v.left=false;
+    v.obj.position.copy(DW_IN[0]);
+    v.yaw=v.yaw0=Math.atan2(DW_IN[1].x-DW_IN[0].x, DW_IN[1].z-DW_IN[0].z);
+    v.obj.rotation.y=v.yaw;
+    vehPath(v,[...DW_IN.slice(1), BAY.spot.clone()], kind==='amb'?8:6.5, ()=>{
+      v.arrived=true; v.yaw0=HP;
+      if(onArrive) onArrive();
+      vehWait(v, v.boarded?1.4:(hold||18), ()=>leaveBay(v));
+    });
+    return v;
+  }
+  function leaveBay(v){
+    if(v.left) return; v.left=true;
+    vehPath(v,[...DW_OUT.map(p=>p.clone())], 7, ()=>killVeh(v));
+  }
+  /* คนไข้กลับบ้าน: มีรถมารับถึงหน้าอาคาร (ถ้าช่องจอดว่าง) · คืนจุดยืนข้างรถ + วิธีบอกว่าขึ้นรถแล้ว */
+  function takeRide(){
+    const v=callVeh('car', null, 45);
+    if(!v) return null;
+    return {x:BAY.spot.x-0.9, z:BAY.spot.z-1.3,
+      done:()=>{ v.boarded=true; if(v.arrived) vehWait(v,1.4,()=>leaveBay(v)); }};
+  }
+  /* มาด้วยรถฉุกเฉิน: รถพยาบาลเข้ามาจอด แล้วคนไข้ลงรถเดินเข้าอาคาร */
+  const AMB_DROP={x:BAY.spot.x-2.5, z:BAY.spot.z-1.3};
+  function ambArrival(go){
+    let started=false;
+    const once=()=>{ if(started) return; started=true; go(); };
+    const v=callVeh('amb', once, 10);
+    if(!v) return null;
+    return {x:AMB_DROP.x, z:AMB_DROP.z, once};
+  }
+  function vehUpdate(dt){
+    trafficStep(dt);
+    for(let i=vehs.length-1;i>=0;i--){ const v=vehs[i]; if(!v.dir) vehStep(v,dt); }
+  }
+  function beaconUpdate(t){
+    const on=Math.floor(t*4)%2===0;
+    for(const v of vehs){
+      const b=v.obj.userData.beacon; if(!b) continue;
+      b[0].material=on?VM.beaconR:VM.dark;
+      b[1].material=on?VM.dark:VM.beaconB;
+    }
+  }
+
+  /* ---------- Furniture builders ---------- */
+  function buildDesk(w,d){
+    const g=new THREE.Group();
+    add(g, boxG(w,0.05,d), M.wood, 0,0.75,0);
+    for(const sx of [-1,1]) add(g, boxG(0.05,0.73,d*0.92), M.white, sx*(w/2-0.06),0.365,0, true,true);
+    add(g, boxG(w-0.14,0.45,0.03), M.white, 0,0.5,d/2-0.06, true,true);
+    return g;
+  }
+  function buildChair(mat){
+    const g=new THREE.Group();
+    add(g, boxG(0.48,0.07,0.46), mat, 0,0.45,0);
+    add(g, boxG(0.48,0.45,0.05), mat, 0,0.72,-0.22);
+    add(g, cylG(0.03,0.03,0.42,6), M.metal, 0,0.22,0, false,false);
+    add(g, cylG(0.24,0.24,0.03,12), M.metal, 0,0.02,0, false,true);
+    return g;
+  }
+  function buildMonitor(){
+    const g=new THREE.Group();
+    add(g, boxG(0.55,0.34,0.04), M.dark, 0,0.27,0, true,false);
+    add(g, boxG(0.5,0.29,0.005), M.screen, 0,0.27,0.022, false,false);
+    add(g, boxG(0.05,0.12,0.05), M.metal, 0,0.07,-0.01, false,false);
+    add(g, boxG(0.22,0.02,0.15), M.metal, 0,0.01,0, false,false);
+    return g;
+  }
+
+  /* ---------- People ---------- */
+  const PG = {
+    thigh: new THREE.CylinderGeometry(0.085,0.075,0.42,8).translate(0,-0.21,0),
+    shin: new THREE.CylinderGeometry(0.072,0.06,0.42,8).translate(0,-0.21,0),
+    shoe: new THREE.BoxGeometry(0.12,0.08,0.24),
+    torso: new THREE.CapsuleGeometry(0.19,0.36,4,10),
+    head: new THREE.SphereGeometry(0.13,16,12),
+    hair: new THREE.SphereGeometry(0.138,16,8,0,TAU,0,PI*0.55),
+    arm: new THREE.CylinderGeometry(0.055,0.045,0.52,7).translate(0,-0.26,0),
+    hand: new THREE.SphereGeometry(0.055,8,6),
+    cap: new THREE.BoxGeometry(0.22,0.07,0.17),
+    steth: new THREE.TorusGeometry(0.1,0.012,6,18,PI),
+  };
+  const SKIN=['#f2c9a7','#dca37c','#b97b56'].map(c=>std(c,0.65));
+  const HAIR=['#2a2220','#4e3a2c','#d2d2d2','#1c1c1c'].map(c=>std(c,0.8));
+  const SHIRT=['#e07a5f','#3d85c6','#81b29a','#f2cc8f','#9b72cf','#e5989b','#5fa8d3','#f4a261'].map(c=>std(c,0.75));
+  const PANTS=['#34495e','#6b5b4b','#2f3e46','#56657a'].map(c=>std(c,0.8));
+  const SCRUB=std('#6cc3bd',0.7), COAT=std('#f7f9fb',0.6), NAVY=std('#26364a',0.8), STAFF=std('#4f86b5',0.7);
+
+  function buildPerson(o){
+    const root=new THREE.Group();
+    const legs=[], knees=[], arms=[];
+    for(const sx of [-1,1]){
+      const hip=new THREE.Group(); hip.position.set(0.095*sx,0.86,0); root.add(hip);
+      hip.add(new THREE.Mesh(PG.thigh,o.pants));
+      const knee=new THREE.Group(); knee.position.y=-0.42; hip.add(knee);
+      knee.add(new THREE.Mesh(PG.shin,o.pants));
+      const shoe=new THREE.Mesh(PG.shoe,M.shoe); shoe.position.set(0,-0.40,0.05); knee.add(shoe);
+      legs.push(hip); knees.push(knee);
+      const sh=new THREE.Group(); sh.position.set(0.25*sx,1.42,0); sh.rotation.z=0.08*sx; root.add(sh);
+      sh.add(new THREE.Mesh(PG.arm,o.sleeve||o.shirt));
+      const hand=new THREE.Mesh(PG.hand,o.skin); hand.position.y=-0.55; sh.add(hand);
+      arms.push(sh);
+    }
+    const torso=new THREE.Mesh(PG.torso,o.shirt); torso.position.y=1.15; torso.scale.set(1,1,0.7); torso.castShadow=true; root.add(torso);
+    const head=new THREE.Group(); head.position.y=1.69; root.add(head);
+    const hm=new THREE.Mesh(PG.head,o.skin); hm.castShadow=true; head.add(hm);
+    const hair=new THREE.Mesh(PG.hair,o.hair); hair.position.set(0,0.015,-0.01); hair.rotation.x=-0.25; head.add(hair);
+    if(o.cap){ const cap=new THREE.Mesh(PG.cap,COAT); cap.position.y=0.15; head.add(cap); }
+    if(o.steth){ const st=new THREE.Mesh(PG.steth,M.dark); st.position.set(0,1.42,0.15); st.rotation.z=PI; root.add(st); }
+    return {root,legs,knees,arms,head};
+  }
+  function makeAgent(o){
+    const person=buildPerson(o);
+    const obj=new THREE.Group(); obj.add(person.root);
+    return {obj, person, yaw:0, targetYaw:0, sit:0, sitTarget:0, walk:0, phase:rand(0,6), mode:'idle', path:null, cb:null, waitT:0,
+      gestR:0, gestL:0, gR:0, gL:0, nod:0, nodT:0, speed:1.35};
+  }
+  function poseUpdate(a, dt){
+    const P=a.person;
+    a.sit += (a.sitTarget-a.sit)*Math.min(1,dt*5);
+    a.gestR += (a.gR-a.gestR)*Math.min(1,dt*5);
+    a.gestL += (a.gL-a.gestL)*Math.min(1,dt*5);
+    a.nod += (a.nodT-a.nod)*Math.min(1,dt*5);
+    const s=a.sit, w=a.walk, ph=a.phase, sw=Math.sin(ph);
+    P.legs[0].rotation.x = -HP*s + sw*0.55*w;
+    P.legs[1].rotation.x = -HP*s - sw*0.55*w;
+    P.knees[0].rotation.x = HP*s + Math.max(0,Math.sin(ph-1.3))*0.75*w;
+    P.knees[1].rotation.x = HP*s + Math.max(0,-Math.sin(ph-1.3))*0.75*w;
+    P.arms[0].rotation.x = -sw*0.5*w - 0.35*s + a.gestL;
+    P.arms[1].rotation.x = sw*0.5*w - 0.35*s + a.gestR;
+    P.root.position.y = -0.33*s + Math.abs(Math.cos(ph))*0.035*w;
+    P.root.position.z = -0.14*s;
+    P.head.rotation.x = a.nod;
+  }
+
+  /* ---------- Movement with eased (trapezoid) speed profile ---------- */
+  function makePath(pts, v){
+    const cum=[0];
+    for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+pts[i].distanceTo(pts[i-1]));
+    const L=cum[cum.length-1], ta=0.45;
+    let T, tri=false;
+    if(L>=v*ta) T=L/v+ta; else { tri=true; const a=v/ta; T=2*Math.sqrt(L/a); }
+    return {pts,cum,L,T,ta,v,tri,t:0,d:0,seg:0};
+  }
+  function profile(p,t){
+    if(t>=p.T || p.L<1e-5) return p.L;
+    const a=p.v/p.ta;
+    if(p.tri){ const tp=p.T/2; return t<tp ? 0.5*a*t*t : p.L-0.5*a*(p.T-t)*(p.T-t); }
+    if(t<p.ta) return 0.5*a*t*t;
+    if(t>p.T-p.ta) return p.L-0.5*a*(p.T-t)*(p.T-t);
+    return 0.5*p.v*p.ta + p.v*(t-p.ta);
+  }
+  function walkTo(a, pts, cb){
+    a.path=makePath([a.obj.position.clone(), ...pts], a.speed);
+    a.mode='walk'; a.cb=cb; a.sitTarget=0;
+  }
+  function waitFor(a, dur, cb){ a.mode='wait'; a.waitT=dur; a.cb=cb; }
+  function sit(a, yaw){ a.sitTarget=1; a.targetYaw=yaw; }
+  function agentUpdate(a, dt){
+    if(a.mode==='walk'){
+      if(a.sit>0.08){ a.sitTarget=0; }
+      else{
+        const p=a.path, prev=p.d;
+        p.t+=dt;
+        const d=profile(p,p.t); p.d=d;
+        while(p.seg<p.pts.length-2 && d>p.cum[p.seg+1]) p.seg++;
+        const a0=p.pts[p.seg], a1=p.pts[p.seg+1];
+        const segL=p.cum[p.seg+1]-p.cum[p.seg];
+        const f=segL>1e-6?(d-p.cum[p.seg])/segL:1;
+        a.obj.position.lerpVectors(a0,a1,Math.min(1,f));
+        const dx=a1.x-a0.x, dz=a1.z-a0.z;
+        if(dx*dx+dz*dz>1e-6) a.targetYaw=Math.atan2(dx,dz);
+        const v=(d-prev)/Math.max(dt,1e-4);
+        a.walk=Math.min(1,v/1.1);
+        a.phase+=v*dt*5.2;
+        if(p.t>=p.T){
+          a.obj.position.copy(p.pts[p.pts.length-1]);
+          a.mode='idle'; a.walk=0;
+          const cb=a.cb; a.cb=null; if(cb) cb();
+        }
+      }
+    } else if(a.mode==='wait'){
+      a.waitT-=dt;
+      if(a.waitT<=0){ a.mode='idle'; const cb=a.cb; a.cb=null; if(cb) cb(); }
+    }
+    if(a.mode!=='walk') a.walk*=Math.max(0,1-dt*8);
+    let dy=a.targetYaw-a.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    a.yaw+=dy*Math.min(1,dt*9);
+    a.obj.rotation.y=a.yaw;
+    poseUpdate(a,dt);
+  }
+  function makeStaff(kind, parent, x, z, yaw, seated){
+    const o = kind==='doctor' ? {skin:pick(SKIN), hair:pick([HAIR[0],HAIR[1],HAIR[3]]), shirt:COAT, pants:NAVY, steth:true}
+            : kind==='nurse' ? {skin:pick(SKIN), hair:pick([HAIR[0],HAIR[3]]), shirt:SCRUB, pants:SCRUB, cap:true}
+            : {skin:pick(SKIN), hair:pick([HAIR[0],HAIR[1]]), shirt:STAFF, pants:NAVY};
+    const a=makeAgent(o);
+    a.obj.position.set(x,0,z); a.yaw=a.targetYaw=yaw;
+    if(seated){ a.sit=a.sitTarget=1; }
+    parent.add(a.obj);
+    poseUpdate(a,0.016);
+    return a;
+  }
+  function staffAnim(a, serving, dt, t){
+    if(serving){ a.gR=-0.75+0.18*Math.sin(t*6+a.phase); a.gL=-0.35; a.nodT=0.12*Math.sin(t*2.2+a.phase); }
+    else { a.gR=0; a.gL=0; a.nodT=0.04*Math.sin(t*0.8+a.phase); }
+    agentUpdate(a,dt);
+  }
+
+  /* ---------- Triage desks ---------- */
+  const desks=[];
+  for(let i=0;i<5;i++){
+    const z=-5.2+i*3.4;
+    const g=new THREE.Group(); g.position.set(-19,0,z); scene.add(g);
+    const desk=buildDesk(1.5,0.8); desk.rotation.y=HP; g.add(desk);
+    const mon=buildMonitor(); mon.position.set(-0.1,0.775,-0.35); mon.rotation.y=-HP+0.35; g.add(mon);
+    add(g, boxG(0.22,0.12,0.16), M.white, 0.12,0.84,0.38, false,false);
+    const cuff=add(g, new THREE.TorusGeometry(0.07,0.025,6,14), M.cuff, 0.12,0.79,0.12, false,false); cuff.rotation.x=HP;
+    const c1=buildChair(M.chairStaff); c1.position.set(-1.0,0,0); c1.rotation.y=HP; g.add(c1);
+    const c2=buildChair(M.chairPatient); c2.position.set(1.12,0,0); c2.rotation.y=-HP; g.add(c2);
+    add(g, boxG(4.3,1.25,0.06), M.divider, -0.85,0.625,1.7);
+    add(g, cylG(0.03,0.03,1.6,6), M.metal, 1.55,0.8,1.3, false,false);
+    const sg=makeSign(1.0,0.36, panelDraw({bg:'#2a9d8f', accent:'#ffd166', title:'ซักประวัติ '+(i+1)}));
+    sg.position.set(1.55,1.78,1.3); sg.rotation.y=0.7; g.add(sg);
+    const nurse=makeStaff('nurse', g, -1.0, 0, HP, true);
+    desks.push({i, z, group:g, sign:sg, pos:V3(-19+1.12,z), active:i<3, closing:false, patient:null, staff:nurse, k:i<3?1:0});
+    g.visible=i<3; g.scale.setScalar(i<3?1:0.0001);
+  }
+
+  /* ---------- Exam rooms ---------- */
+  const rooms=[];
+  for(let i=0;i<5;i++){
+    const c=-12+i*6;
+    const g=new THREE.Group(); g.position.set(c,0,-11); scene.add(g);
+    for(const sx of [-1,1]) add(g, boxG(0.1,2.5,6), M.part, sx*2.94,1.25,0);
+    for(const sx of [-1,1]){
+      add(g, boxG(2.15,1.1,0.1), M.partLow, sx*1.875,0.55,2.95);
+      add(g, boxG(2.15,1.4,0.04), M.glass, sx*1.875,1.8,2.95, false,false);
+      add(g, boxG(0.08,2.45,0.14), M.trim, sx*0.8,1.225,2.95, true,false);
+    }
+    add(g, boxG(5.98,0.1,0.12), M.trim, 0,2.5,2.95, false,false);
+    add(g, boxG(1.6,0.3,0.12), M.trim, 0,2.3,2.95, false,false);
+    const desk=buildDesk(1.7,0.8); desk.position.set(0,0,-0.9); g.add(desk);
+    const mon=buildMonitor(); mon.position.set(0.4,0.775,-1.1); mon.rotation.y=PI+0.35; g.add(mon);
+    const c1=buildChair(M.chairStaff); c1.position.set(0,0,-1.75); g.add(c1);
+    const c2=buildChair(M.chairPatient); c2.position.set(0,0,0.1); c2.rotation.y=PI; g.add(c2);
+    add(g, boxG(0.85,0.5,1.9), M.white, 1.95,0.25,-0.9);
+    add(g, boxG(0.82,0.12,1.86), M.mattress, 1.95,0.56,-0.9);
+    add(g, boxG(0.5,0.1,0.3), M.white, 1.95,0.67,-1.6, false,false);
+    add(g, boxG(1.1,0.9,0.5), M.white, -2.2,0.45,-2.65);
+    add(g, boxG(1.14,0.04,0.54), M.wood, -2.2,0.92,-2.65, false,true);
+    // door display
+    add(g, boxG(1.2,0.52,0.06), M.dark, 0,2.78,2.96, false,false);
+    const disp=canvasTex(320,128);
+    const dm=new THREE.Mesh(new THREE.PlaneGeometry(1.12,0.448), new THREE.MeshBasicMaterial({map:disp.t, toneMapped:false}));
+    dm.position.set(0,2.78,2.995); g.add(dm);
+    const doc=makeStaff('doctor', g, 0, -1.75, 0, true);
+    rooms.push({i, c, group:g, pos:V3(c,-10.9), active:i<3, closing:false, patient:null, staff:doc, disp, k:i<3?1:0});
+    g.visible=i<3; g.scale.setScalar(i<3?1:0.0001);
+  }
+  const roomsSign=makeSign(9,1.0, panelDraw({bg:'#3a7fd0', accent:'#ffd166', title:'ห้องตรวจแพทย์', sub:'แพทย์จะเรียกเข้าห้องตามหมายเลขบนจอเรียกคิว'}));
+  roomsSign.position.set(0,3.55,-13.97); scene.add(roomsSign);
+
+  /* ---------- Service counters ---------- */
+  const SVCS=[
+    {key:'finance', name:'การเงิน', sub:'ชำระค่าบริการ', z:-5, color:'#2e9d6f'},
+    {key:'pharmacy', name:'ห้องยา', sub:'รับยา และคำแนะนำการใช้ยา', z:1, color:'#3a7fd0'},
+    {key:'lab', name:'ห้องแล็บ', sub:'เจาะเลือด / เก็บสิ่งส่งตรวจ', z:7, color:'#8a5cc7'},
+  ];
+  const SV={};
+  for(const s of SVCS){
+    const g=new THREE.Group(); g.position.set(19,0,s.z); scene.add(g);
+    const cm=std(s.color,0.6);
+    add(g, boxG(0.9,1.0,3.0), cm, 0,0.5,0);
+    add(g, boxG(1.1,0.06,3.2), M.woodCounter, 0,1.03,0);
+    add(g, boxG(0.03,0.55,2.9), M.glass, 0.12,1.34,0, false,false);
+    add(g, boxG(0.5,2.1,3.0), M.white, 2.55,1.05,0);
+    const pale=std(s.color,0.7,{emissive:s.color, emissiveIntensity:0.05});
+    for(let k=0;k<6;k++) add(g, boxG(0.28,0.24,0.38), k%2?pale:M.white, 2.2,0.55+(k%3)*0.6,-0.8+Math.floor(k/3)*1.5, false,false);
+    const sg=makeSign(2.7,0.82, panelDraw({bg:s.color, accent:'#ffd166', title:s.name, sub:s.sub}), 1.1);
+    sg.position.set(0.3,3.05,0); sg.rotation.y=-PI/4; g.add(sg);
+    s.group=g; s.queue=[]; s.busy=false;
+    s.staff=makeStaff('staff', g, 1.15, 0, -HP, false);
+    SV[s.key]=s;
+  }
+  const spotPos=(svc,i)=>V3(17.85-0.8*Math.min(i,4), svc.z);
+
+  /* ---------- Waiting chairs (instanced) ---------- */
+  const seatsT=[], seatsE=[];
+  [4.2,6.6,9.0].forEach(z=>[-10,-8.9,-7.8,-6.7,-5.6].forEach(x=>seatsT.push({x,z,aisle:z-1.15,pos:V3(x,z),occ:false})));
+  [0,2.4,4.8].forEach(z=>[1.5,2.6,3.7,4.8,5.9,7.0].forEach(x=>seatsE.push({x,z,aisle:z-1.15,pos:V3(x,z),occ:false})));
+  {
+    const all=[...seatsT,...seatsE], n=all.length;
+    const seatIM=new THREE.InstancedMesh(boxG(0.5,0.07,0.48), M.chairWait, n);
+    const backIM=new THREE.InstancedMesh(boxG(0.5,0.48,0.05), M.chairWait, n);
+    const legIM=new THREE.InstancedMesh(boxG(0.44,0.42,0.04), M.metal, n);
+    const d=new THREE.Object3D();
+    all.forEach((s,i)=>{
+      d.position.set(s.x,0.45,s.z); d.updateMatrix(); seatIM.setMatrixAt(i,d.matrix);
+      d.position.set(s.x,0.73,s.z+0.23); d.updateMatrix(); backIM.setMatrixAt(i,d.matrix);
+      d.position.set(s.x,0.21,s.z+0.05); d.updateMatrix(); legIM.setMatrixAt(i,d.matrix);
+    });
+    for(const im of [seatIM,backIM,legIM]){ im.castShadow=true; im.receiveShadow=true; scene.add(im); }
+  }
+
+  /* ---------- Signs & kiosk ---------- */
+  function standSign(x,z,w,h,draw,rotY=0){
+    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=rotY; scene.add(g);
+    add(g, boxG(0.5,0.06,0.3), M.metal, 0,0.03,0, false,true);
+    add(g, cylG(0.04,0.04,1.6,8), M.metal, 0,0.8,-0.03, true,false);
+    const s=makeSign(w,h,draw); s.position.y=1.6+h/2; g.add(s);
+    return g;
+  }
+  standSign(-7.8,10.6,2.6,0.7, panelDraw({bg:'#3a7fd0', accent:'#ffd166', title:'จุดรอซักประวัติ', sub:'รอพยาบาลเรียกตามหมายเลข'}));
+  standSign(4.25,6.5,2.8,0.7, panelDraw({bg:'#e0912b', accent:'#ffffff', title:'จุดรอพบแพทย์', sub:'โปรดดูหมายเลขบนจอเรียกคิว'}));
+  const triSign=makeSign(3.6,0.95, panelDraw({bg:'#2a9d8f', accent:'#ffd166', title:'จุดซักประวัติ', sub:'พยาบาลคัดกรอง • วัดความดัน • ชั่งน้ำหนัก'}), 1.4);
+  triSign.position.set(-18.6,3.15,11.4); scene.add(triSign);
+
+  // Directory pylon
+  {
+    const g=new THREE.Group(); g.position.set(-5.4,0,12.6); scene.add(g);
+    add(g, boxG(0.7,0.08,0.4), M.metal, 0,0.04,0, false,true);
+    add(g, boxG(0.14,1.1,0.14), M.metal, 0,0.55,-0.03);
+    const rows=[
+      {d:'left', t:'จุดซักประวัติ (พยาบาล)', c:'#2a9d8f'},
+      {d:'up', t:'ห้องตรวจแพทย์', c:'#3a7fd0'},
+      {d:'right', t:'การเงิน • ห้องยา • ห้องแล็บ', c:'#8a5cc7'},
+      {d:'down', t:'ทางออก / กลับบ้าน', c:'#e07a5f'},
+    ];
+    const s=makeSign(2.6,2.3,(gg,W,H)=>{
+      rr(gg,0,0,W,H,40); gg.fillStyle='#173847'; gg.fill();
+      gg.fillStyle='#fff'; gg.textAlign='center'; gg.textBaseline='middle';
+      gg.font=`800 ${Math.round(H*0.1)}px ${FONT}`; gg.fillText('ป้ายบอกทาง',W/2,H*0.1);
+      rows.forEach((r,i)=>{
+        const y=H*0.26+i*H*0.185;
+        rr(gg,W*0.04,y-H*0.075,W*0.92,H*0.15,22); gg.fillStyle=r.c; gg.fill();
+        arrow(gg,W*0.13,y,H*0.11,r.d,'#fff');
+        gg.fillStyle='#fff'; gg.textAlign='left';
+        fitFont(gg,r.t,700,H*0.075,W*0.7); gg.fillText(r.t,W*0.22,y);
+      });
+    });
+    s.position.y=2.2; g.add(s);
+  }
+
+  // Ticket kiosk
+  {
+    const g=new THREE.Group(); g.position.set(3.6,0,11.2); scene.add(g);
+    add(g, boxG(0.55,1.25,0.5), M.white, 0,0.625,0);
+    add(g, boxG(0.57,0.22,0.52), M.trim, 0,1.36,0);
+    const scr=add(g, boxG(0.02,0.32,0.4), M.screen, -0.285,1.05,0, false,false); scr.rotation.z=-0.25;
+    add(g, boxG(0.03,0.05,0.2), M.dark, -0.28,0.75,0, false,false);
+    add(g, cylG(0.025,0.025,0.5,6), M.metal, 0,1.72,0, false,false);
+    const s=makeSign(1.2,0.4, panelDraw({bg:'#14596a', accent:'#ffd166', title:'กดบัตรคิว'}));
+    s.position.set(0,2.15,0); g.add(s);
+  }
+
+  /* ---------- Queue display board ---------- */
+  const board=canvasTex(1024,600);
+  {
+    const g=new THREE.Group(); g.position.set(18.6,0,-11); g.rotation.y=-0.75; scene.add(g);
+    for(const sx of [-1.7,1.7]) add(g, cylG(0.07,0.07,2.3,10), M.metal, sx,1.15,-0.05);
+    add(g, boxG(5.2,3.1,0.18), M.dark, 0,3.75,-0.05);
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(4.9,2.87), new THREE.MeshBasicMaterial({map:board.t, toneMapped:false}));
+    scr.position.set(0,3.75,0.045); g.add(scr);
+    add(g, boxG(5.2,0.12,0.25), M.trim, 0,5.36,-0.05, false,false);
+  }
+
+  /* ---------- Highlight ring for story ---------- */
+  const ringMat=new THREE.MeshBasicMaterial({color:0x2bb3a3, transparent:true, opacity:0.45, depthWrite:false, side:THREE.DoubleSide});
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.92,1,64), ringMat);
+  ring.rotation.x=-HP; ring.position.y=0.03; scene.add(ring);
+  const discMat=new THREE.MeshBasicMaterial({color:0x2bb3a3, transparent:true, opacity:0.07, depthWrite:false});
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(0.92,48), discMat);
+  disc.rotation.x=-HP; disc.position.y=0.025; scene.add(disc);
+
+  /* ---------- Simulation ---------- */
+  const patients=[];
+  let qNum=0, simTime=0, storyTime=0, realTime=0, servedCount=0, nextSpawn=1.5;
+  const calls=[]; let lastCallReal=-99;
+  const TAGC={waitT:'#3a7fd0', triage:'#2a9d8f', waitE:'#e0912b', called:'#23a35f', exam:'#d1495b', after:'#7d5cc7', home:'#7b8a96'};
+
+  /* ป้ายเหนือหัวคนไข้: เลขคิว + เวลารอ · สีตามเวลารอ (เขียว/เหลือง/แดง) · เทา = ตรวจเสร็จ/ออกจากจุด */
+  const TAG_W=0.9, TAG_H=0.45, TAG_PX=[192,96];
+  function createPatient(n,label){
+    const elder=Math.random()<0.25;
+    const p=makeAgent({skin:pick(SKIN), hair:elder?HAIR[2]:pick([HAIR[0],HAIR[1],HAIR[3]]), shirt:pick(SHIRT), pants:pick(PANTS)});
+    p.speed=elder?rand(0.95,1.15):rand(1.25,1.5);
+    if(elder) p.person.root.scale.setScalar(0.96);
+    p.num=n; p.label=label||('A'+String(n%1000).padStart(3,'0'));
+    const c=document.createElement('canvas'); c.width=TAG_PX[0]; c.height=TAG_PX[1];
+    p.tagG=c.getContext('2d');
+    p.tagTex=new THREE.CanvasTexture(c); p.tagTex.colorSpace=THREE.SRGBColorSpace;
+    p.tag=new THREE.Sprite(new THREE.SpriteMaterial({map:p.tagTex, transparent:true, toneMapped:false}));
+    p.tag.scale.set(TAG_W,TAG_H,1); p.tag.position.y=2.16; p.tag.visible=false;
+    p.person.root.add(p.tag);
+    p.tagKey=null; p.tagKind=''; p.since=null; p.sinceStage=''; p.fade=0; p.dead=false; p.fromCounter=false; p.route=[];
+    scene.add(p.obj);
+    return p;
+  }
+  function waitMinOf(p){
+    if(p.since==null) return null;
+    return L.mode==='sim' ? Math.max(0,Math.floor(simTime-p.since)) : Math.max(0,Math.floor((Date.now()-p.since)/60000));
+  }
+  function retag(p){
+    const done=p.tagKind==='after'||p.tagKind==='home';
+    const m=done?null:waitMinOf(p), lv=waitLevel(m);
+    const bg=done?DONE_C:LV_BG[lv], fg=done?'#fff':LV_FG[lv];
+    const sub=done?'ตรวจเสร็จ':(m==null?'':`รอ ${m} นาที`);
+    const key=p.label+'|'+bg+'|'+sub;
+    if(p.tagKey===key) return;
+    p.tagKey=key;
+    const g=p.tagG, W=TAG_PX[0], H=TAG_PX[1];
+    g.clearRect(0,0,W,H);
+    rr(g,4,4,W-8,H-8,20); g.fillStyle=bg; g.fill();
+    g.lineWidth=4; g.strokeStyle='rgba(255,255,255,0.92)'; g.stroke();
+    g.fillStyle=fg; g.textAlign='center'; g.textBaseline='middle';
+    fitFont(g,p.label,800,44,W-26); g.fillText(p.label,W/2,sub?37:H/2);
+    if(sub){ fitFont(g,sub,600,22,W-26); g.fillText(sub,W/2,71); }
+    p.tagTex.needsUpdate=true; p.tag.visible=true;
+  }
+  /* key = ขั้นของคนไข้ในโหมดจำลอง (waitT/triage/waitE/called/exam/after/home) — เริ่มนับเวลารอใหม่เมื่อเปลี่ยนจุด */
+  function setTag(p,key){
+    const stage=(key==='waitT'||key==='triage')?'T':(key==='waitE'||key==='called'||key==='exam')?'E':'X';
+    if(L.mode==='sim' && stage!==p.sinceStage){ p.sinceStage=stage; p.since=stage==='X'?null:simTime; }
+    p.tagKind=key; retag(p);
+  }
+  function removePatient(p){
+    scene.remove(p.obj); p.tagTex.dispose(); p.tag.material.dispose(); p.dead=true;
+    if(p.vn && L.av.get(p.vn)===p) L.av.delete(p.vn);
+  }
+
+  function spawnPatient(){
+    const seat=seatsT.find(s=>!s.occ); if(!seat) return false;
+    seat.occ=true; qNum++;
+    const p=createPatient(qNum); p.seat=seat;
+    p.obj.position.set(rand(-0.5,0.7),0,14.9); p.yaw=p.targetYaw=PI;
+    p.state='arrive'; patients.push(p);
+    let started=false;
+    const go=()=>{
+      if(started||p.dead) return; started=true;
+      walkTo(p,[V3(0.3,13.4),V3(2.75,11.2)],()=>{
+        p.targetYaw=HP; p.state='ticket';
+        waitFor(p,1.3,()=>{
+          setTag(p,'waitT'); p.state='toSeatT';
+          walkTo(p,[V3(-3.6,seat.aisle),V3(seat.x,seat.aisle),seat.pos.clone()],()=>{ sit(p,PI); p.state='waitT'; });
+        });
+      });
+    };
+    const amb=Math.random()<0.12?ambArrival(go):null;        // ราว 1 ใน 8 มากับรถฉุกเฉิน
+    if(amb){ p.obj.position.set(amb.x,0,amb.z); p.yaw=p.targetYaw=PI; waitFor(p,40,go); }
+    else go();
+    return true;
+  }
+  function seedSeated(seat, state, tE){
+    seat.occ=true; qNum++;
+    const p=createPatient(qNum); p.seat=seat;
+    p.obj.position.copy(seat.pos); p.yaw=p.targetYaw=PI; p.sit=p.sitTarget=1;
+    p.state=state; p.tE=tE;
+    setTag(p, state==='waitT'?'waitT':'waitE');
+    p.since=simTime-rand(5,45); retag(p);
+    patients.push(p);
+  }
+  function callToDesk(p,d){
+    d.patient=p; p.desk=d; p.state='toDesk';
+    const s=p.seat; s.occ=false; p.seat=null;
+    walkTo(p,[V3(s.x,s.aisle),V3(-12.5,s.aisle),V3(-15,d.z),d.pos.clone()],()=>{
+      sit(p,-HP); p.state='triage'; setTag(p,'triage');
+      waitFor(p,rand(4.5,6),()=>{ p.state='triageDone'; });
+    });
+  }
+  function goWaitExam(p,s){
+    s.occ=true; p.seat=s;
+    const d=p.desk; p.desk=null; p.state='toSeatE'; setTag(p,'waitE');
+    walkTo(p,[V3(-15,d.z),V3(-12.5,1.5),V3(0.4,1.5),V3(0.4,s.aisle),V3(s.x,s.aisle),s.pos.clone()],()=>{
+      sit(p,PI); p.state='waitE'; p.tE=simTime;
+    });
+    releaseUnit(d);
+  }
+  function callToRoom(p,r){
+    r.patient=p; p.room=r; p.state='toRoom';
+    const s=p.seat; s.occ=false; p.seat=null; setTag(p,'called');
+    announce(p.label,'ห้องตรวจ '+(r.i+1));
+    walkTo(p,[V3(s.x,s.aisle),V3(0.4,s.aisle),V3(0.4,-2.6),V3(r.c,-6.3),V3(r.c,-7.4),r.pos.clone()],()=>{
+      sit(p,PI); p.state='exam'; setTag(p,'exam');
+      waitFor(p,rand(6,8.5),()=>afterExam(p));
+    });
+  }
+  function afterExam(p){
+    const r=p.room; p.state='leaveRoom'; setTag(p,'after');
+    walkTo(p,[V3(r.c,-7.4),V3(r.c,-6.3)],()=>{
+      p.room=null; releaseUnit(r);
+      const x=Math.random();
+      p.route = x<0.38?['finance','pharmacy'] : x<0.56?['lab','finance'] : x<0.78?['finance'] : [];
+      p.fromCounter=false;
+      goNext(p);
+    });
+  }
+  function goNext(p){
+    if(!p.route.length){ goHome(p); return; }
+    const svc=SV[p.route.shift()];
+    svc.queue.push(p); p.svc=svc; p.state='toSvc'; setTag(p,'after');
+    const i=svc.queue.length-1, z=p.obj.position.z;
+    const pre = p.fromCounter ? [V3(17.2,z+1.1),V3(14.5,z+1.1)] : [V3(14.5,z)];
+    walkTo(p,[...pre,V3(14.5,svc.z),spotPos(svc,i)],()=>{ p.state='inLine'; });
+  }
+  function goHome(p){
+    p.state='leaving'; setTag(p,'home');
+    const z=p.obj.position.z;
+    const pts = p.fromCounter
+      ? [V3(17.2,z+1.1),V3(14.5,z+1.1),V3(14.5,11),V3(2.2,12.9),V3(0.3,14.4),V3(0.3,14.9)]
+      : [V3(-2,-4.6),V3(-2,12.4),V3(-0.3,14.4),V3(-0.3,14.9)];
+    const ride=takeRide();                                   // รถมารับถึงหน้าอาคาร (ถ้าช่องจอดว่าง)
+    if(ride) pts.push(V3(ride.x,ride.z));
+    walkTo(p,pts,()=>{ p.state='gone'; p.fade=1; servedCount++; if(ride) ride.done(); });
+  }
+  function releaseUnit(u){
+    u.patient=null;
+    if(u.closing){ u.closing=false; u.active=false; refreshUI(); }
+  }
+  function dispatch(){
+    if(L.mode==='sim') dispatchSim();
+    dispatchSvc();
+  }
+  function dispatchSim(){
+    for(const d of desks){
+      if(d.active && !d.closing && !d.patient){
+        const p=patients.find(q=>q.state==='waitT'); if(!p) break;
+        callToDesk(p,d);
+      }
+    }
+    for(const p of patients){
+      if(p.state==='triageDone'){
+        const s=seatsE.find(s=>!s.occ); if(!s) break;
+        goWaitExam(p,s);
+      }
+    }
+    for(const r of rooms){
+      if(r.active && !r.closing && !r.patient){
+        let best=null;
+        for(const p of patients) if(p.state==='waitE' && (!best || p.tE<best.tE)) best=p;
+        if(!best) break;
+        callToRoom(best,r);
+      }
+    }
+    if(simTime>=nextSpawn){
+      if(patients.length<44 && spawnPatient()) nextSpawn=simTime+rand(2.4,3.8);
+      else nextSpawn=simTime+1;
+    }
+  }
+  /* คิวที่เคาน์เตอร์การเงิน/ห้องยา/แล็บ — ใช้ทั้งโหมดจำลองและข้อมูลจริง (คนไข้ที่ถูกส่งต่อออกจากห้องตรวจ) */
+  function dispatchSvc(){
+    for(const svc of SVCS){
+      svc.queue.forEach((p,i)=>{
+        if(p.state!=='inLine') return;
+        const sp=spotPos(svc,i);
+        if(p.obj.position.distanceTo(sp)>0.05){ p.state='shuffle'; walkTo(p,[sp],()=>{ p.state='inLine'; }); return; }
+        p.targetYaw=HP;
+        if(i===0 && !svc.busy){
+          svc.busy=true; p.state='served';
+          waitFor(p,rand(3.5,5.5),()=>{ svc.queue.shift(); svc.busy=false; p.svc=null; p.fromCounter=true; goNext(p); });
+        }
+      });
+    }
+  }
+
+  /* ---------- Display drawing ---------- */
+  function counts(){
+    let t=0,e=0,s=0;
+    for(const p of patients){
+      if(p.state==='waitT'||p.state==='toSeatT'||p.state==='ticket'||p.state==='arrive') t++;
+      else if(p.state==='waitE'||p.state==='toSeatE'||p.state==='triageDone') e++;
+      else if(p.state==='toSvc'||p.state==='inLine'||p.state==='shuffle'||p.state==='served') s++;
+    }
+    return {t,e,s};
+  }
+  function drawBoard(blinkOn){
+    const g=board.g, W=1024, H=600;
+    const grd=g.createLinearGradient(0,0,0,H); grd.addColorStop(0,'#0e2c40'); grd.addColorStop(1,'#0a1f2e');
+    g.fillStyle=grd; g.fillRect(0,0,W,H);
+    g.fillStyle='#1fa192'; g.fillRect(0,0,W,96);
+    g.textBaseline='middle'; g.textAlign='left'; g.fillStyle='#fff';
+    g.font=`700 46px ${FONT}`; g.fillText('จอเรียกคิว • ห้องตรวจแพทย์',34,50);
+    let hh, mm;
+    if(L.mode==='sim'){ const mins=Math.floor(simTime)%(10*60); hh=8+Math.floor(mins/60); mm=mins%60; }
+    else { const d=new Date(); hh=d.getHours(); mm=d.getMinutes(); }
+    g.textAlign='right'; g.font=`600 40px ${FONT}`;
+    g.fillText(String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+' น.',W-34,50);
+    g.fillStyle='#8fd3df'; g.font=`600 30px ${FONT}`;
+    g.textAlign='left'; g.fillText('หมายเลข',64,134);
+    g.textAlign='right'; g.fillText('ห้องตรวจ',W-64,134);
+    for(let i=0;i<4;i++){
+      const y=168+i*86, call=calls[i];
+      rr(g,30,y,W-60,74,14);
+      const hi=i===0 && call && (realTime-lastCallReal<4);
+      g.fillStyle = i===0 && call ? (hi&&blinkOn?'#ffd166':'#2f7a93') : 'rgba(255,255,255,0.07)';
+      g.fill();
+      if(!call){ g.fillStyle='rgba(255,255,255,0.25)'; g.textAlign='center'; g.font=`600 40px ${FONT}`; g.fillText('—',W/2,y+38); continue; }
+      const dark=hi&&blinkOn;
+      g.fillStyle=dark?'#1b2a35':'#fff'; g.textAlign='left'; fitFont(g,call.num,800,54,W/2-110); g.fillText(call.num,64,y+39);
+      arrow(g,W/2,y+37,54,'right',dark?'#1b2a35':'#7fe0c9');
+      g.fillStyle=dark?'#1b2a35':'#fff'; g.textAlign='right'; fitFont(g,call.room,700,46,W/2-110); g.fillText(call.room,W-64,y+39);
+    }
+    g.fillStyle='#132f44'; g.fillRect(0,522,W,78);
+    g.fillStyle='#cfe8ef'; g.textAlign='center';
+    let foot;
+    if(L.mode==='sim'){
+      const c=counts(), open=rooms.filter(r=>r.active&&!r.closing).length;
+      foot=`รอพบแพทย์ ${c.e} คน   •   รอซักประวัติ ${c.t} คน   •   เปิดห้องตรวจ ${open} ห้อง`;
+    } else {
+      const s=L.stats;
+      foot=`รอพบแพทย์ ${s.e} คน   •   รอซักประวัติ ${s.t} คน   •   รอเกิน ${pref.r} นาที ${s.red} คน`;
+    }
+    fitFont(g,foot,600,30,W-40); g.fillText(foot,W/2,561);
+    board.t.needsUpdate=true;
+  }
+  function drawRoomDisp(r, blinkOn){
+    const g=r.disp.g, W=320, H=128;
+    g.fillStyle='#0f2b3c'; g.fillRect(0,0,W,H);
+    g.fillStyle='#1fa192'; g.fillRect(0,0,W,40);
+    g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle';
+    const live=L.mode==='live';
+    const title=live ? (r.point?r.point.name:'ห้องตรวจ') : 'ห้องตรวจ '+(r.i+1);
+    fitFont(g,title,700,28,W-16); g.fillText(title,W/2,21);
+    const by=live?80:86;
+    if(r.patient){
+      const called=r.patient.state==='toRoom';
+      g.fillStyle = called&&blinkOn ? '#ffffff' : '#ffd166';
+      fitFont(g,r.patient.label,800,56,W-20); g.fillText(r.patient.label,W/2,by);
+    } else {
+      g.fillStyle=r.closing?'#e07a5f':'#7b95a3'; g.font=`600 40px ${FONT}`; g.fillText(r.closing?'ปิดรับ':'ว่าง',W/2,by);
+    }
+    if(live && r.point){
+      const n=r.point.items.filter(it=>!it.busy).length;
+      g.fillStyle='#9fc4d2'; g.font=`600 18px ${FONT}`; g.fillText(`รอ ${n} คน`,W/2,116);
+    }
+    r.disp.t.needsUpdate=true;
+  }
+
+  let toastTimer=0;
+  function showToast(msg,ms=3200){
+    const t=$('toast'); t.textContent=msg;
+    t.classList.add('show'); clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
+  }
+  function announce(label,roomName){
+    calls.unshift({num:label, room:roomName}); if(calls.length>5) calls.length=5;
+    lastCallReal=realTime;
+    showToast(`🔔 เชิญหมายเลข ${label} ที่ ${roomName}`);
+  }
+
+  /* ---------- UI ---------- */
+  const openCount=arr=>arr.filter(u=>u.active&&!u.closing).length;
+  function addUnit(arr){
+    const c=arr.find(u=>u.closing);
+    if(c){ c.closing=false; }
+    else{
+      const n=arr.find(u=>!u.active); if(!n) return;
+      n.active=true; n.group.visible=true;
+    }
+    refreshUI();
+  }
+  function removeUnit(arr){
+    if(openCount(arr)<=1) return;
+    let u=null;
+    for(let i=arr.length-1;i>=0;i--){ if(arr[i].active && !arr[i].closing){ u=arr[i]; break; } }
+    if(!u) return;
+    if(u.patient) u.closing=true; else u.active=false;
+    refreshUI();
+  }
+  function refreshUI(){
+    $('tCount').textContent=openCount(desks);
+    $('rCount').textContent=openCount(rooms);
+    $('tMinus').disabled=openCount(desks)<=1; $('tPlus').disabled=openCount(desks)>=5;
+    $('rMinus').disabled=openCount(rooms)<=1; $('rPlus').disabled=openCount(rooms)>=5;
+    for(const b of ['tMinus','tPlus','rMinus','rPlus']) $(b).style.opacity=$(b).disabled?0.4:1;
+    const notes=[];
+    desks.filter(d=>d.closing).forEach(d=>notes.push(`โต๊ะซักประวัติ ${d.i+1} จะปิดเมื่อซักประวัติคนไข้ปัจจุบันเสร็จ`));
+    rooms.filter(r=>r.closing).forEach(r=>notes.push(`ห้องตรวจ ${r.i+1} จะปิดเมื่อตรวจคนไข้ปัจจุบันเสร็จ`));
+    $('note').textContent=notes.join(' • ');
+  }
+  const blurAfter=(id,fn)=>$(id).addEventListener('click',e=>{ fn(); e.currentTarget.blur(); });
+  blurAfter('tPlus',()=>addUnit(desks));
+  blurAfter('tMinus',()=>removeUnit(desks));
+  blurAfter('rPlus',()=>addUnit(rooms));
+  blurAfter('rMinus',()=>removeUnit(rooms));
+
+  let playing=!reduced, speed=1;
+  function setPlaying(v){
+    playing=v;
+    $('play').textContent=v?'⏸ หยุดชั่วคราว':'▶ เล่น';
+    $('play').setAttribute('aria-pressed',String(!v));
+    if(v) $('startPrompt').classList.add('hide');
+  }
+  blurAfter('play',()=>setPlaying(!playing));
+  blurAfter('startBtn',()=>setPlaying(true));
+  $('speed').addEventListener('input',e=>{ speed=parseFloat(e.target.value); $('speedOut').textContent=speed+'×'; });
+  window.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ for(const id of ['ovConn','ovSet']) if(!$(id).hidden){ $(id).hidden=true; if(id==='ovSet') $('btnSet').focus(); } return; }
+    if(e.target && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) return;   // ไม่แย่งปุ่ม Space ตอนพิมพ์/เลือก
+    if(e.code==='Space' || e.key===' '){ e.preventDefault(); setPlaying(!playing); }
+  });
+  if(reduced){ $('startPrompt').classList.remove('hide'); }
+  setPlaying(playing);
+
+  /* ---------- Camera controls ---------- */
+  const DEF={theta:0, phi:0.92, radius:44};   // 44 = เห็นลานรับส่งหน้าอาคารด้วย (40 ตัดขอบล่างพอดีหน้าประตู)
+  const view={...DEF};
+  const RMIN=14, RMAX=72;
+  let resetting=false;
+  function resetView(){ view.theta=Math.atan2(Math.sin(view.theta),Math.cos(view.theta)); resetting=true; }
+  blurAfter('resetView',resetView);
+  canvas.addEventListener('dblclick',resetView);
+  const pointers=new Map(); let pinchD=0;
+  const pdist=()=>{ const a=[...pointers.values()]; return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); };
+  canvas.addEventListener('pointerdown',e=>{
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    resetting=false;
+    if(pointers.size===2) pinchD=pdist();
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!pointers.has(e.pointerId)) return;
+    const prev=pointers.get(e.pointerId);
+    if(pointers.size===1){
+      view.theta-=(e.clientX-prev.x)*0.005;
+      view.phi=clamp(view.phi-(e.clientY-prev.y)*0.004,0.22,1.36);
+    }
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size===2){
+      const d=pdist();
+      if(pinchD>0 && d>0) view.radius=clamp(view.radius*pinchD/d,RMIN,RMAX);
+      pinchD=d;
+    }
+  });
+  const endPtr=e=>{ pointers.delete(e.pointerId); pinchD=pointers.size===2?pdist():0; };
+  canvas.addEventListener('pointerup',endPtr);
+  canvas.addEventListener('pointercancel',endPtr);
+  canvas.addEventListener('wheel',e=>{
+    e.preventDefault(); resetting=false;
+    view.radius=clamp(view.radius*Math.exp(e.deltaY*0.0011),RMIN,RMAX);
+  },{passive:false});
+
+  window.addEventListener('resize',()=>{
+    camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth,window.innerHeight);
+  });
+
+  /* ---------- Story timeline ---------- */
+  const ZONES=[
+    {t:'รถมาส่งที่หน้าอาคาร รับบัตรคิวที่ทางเข้า แล้วนั่งรอพยาบาลเรียกซักประวัติ', p:V3(-3,11.5), r:6},
+    {t:'พยาบาลเรียกซักประวัติ วัดความดัน ชั่งน้ำหนัก', p:V3(-18.4,1.6), r:6},
+    {t:'นั่งรอพบแพทย์ ดูหมายเลขของตนบนจอเรียกคิว', p:V3(5,2.4), r:5.4},
+    {t:'แพทย์เรียกเข้าห้องตรวจตามหมายเลขบนจอ', p:V3(0,-11), r:8.5},
+    {t:'ตรวจเสร็จ ไปการเงิน ห้องยา ห้องแล็บ หรือกลับบ้าน', p:V3(16,1.5), r:7},
+  ];
+  const CYCLE=32;
+  const zonePos=new THREE.Vector3(), camTarget=new THREE.Vector3(0,0,0), desiredTarget=new THREE.Vector3(), baseTarget=new THREE.Vector3(0,0,-1);
+  let lastK=-1;
+
+  /* =====================================================================
+     ข้อมูลจริงจาก HOSxP ผ่าน BMS Session (/api/sql อ่านอย่างเดียว)
+     - จุดซักประวัติ = คนไข้ที่ ovst.cur_dep เป็นแผนกซักประวัติ/คัดกรอง (ถูกส่งต่อมาจุดซักประวัติ)
+     - ห้องตรวจ     = คนไข้ที่ ovst.cur_dep เป็นแผนกห้องตรวจ (ถูกส่งต่อมาห้องตรวจ)
+     - "ยังรออยู่ที่จุดนั้นจริงไหม" — cur_dep อย่างเดียวเชื่อไม่ได้ เพราะ HOSxP ไม่เคลียร์ cur_dep ตอนคนไข้กลับบ้าน
+       (ยืนยันที่ ppbh_hosxp 25/11/2569: 1,007 จาก 1,011 visit ของวันนั้นยังมี cur_dep ค้างอยู่) จึงกรองสองชั้น
+       1) opd_dep_queue แถวของ (vn, cur_dep) — มี finish_datetime แล้ว = แผนกปิดงานคนไข้รายนี้ → ไม่นับว่ารออยู่
+          (วันนั้น 59 จาก 105 คนที่ cur_dep ชี้มาที่จุดซักประวัติ/ห้องตรวจ ถูกปิดงานไปแล้ว)
+          queue_datetime ของแถวที่ยังค้าง = เวลาที่ถูกส่งเข้าแผนกนั้น = เวลาเริ่มรอที่แม่นกว่า cur_dep_time
+          (cur_dep_time ที่นี่มักเท่ากับ vsttime คือเวลามาถึงโรงพยาบาล ไม่ใช่เวลาที่ถูกส่งมาจุดนี้)
+       2) ovst.ovstost (สถานะ visit) — ตรวจแล้ว/รอรับยา/รับยาแล้ว/รอชำระเงิน/ไม่รอ/Admit/ส่งต่อ/เสียชีวิต = พ้นจุดนี้แล้ว
+          "รอผลตรวจ" = ยังอยู่ แต่รอผล Lab/X-ray ไม่ได้รอหมอ → แยกนับ ไม่รวมในคิวรอพบแพทย์
+          "ตรวจรักษาที่แผนก / ที่ห้อง ER" = กำลังรับบริการ
+       ปิดการกรองนี้ได้ที่หน้าต่างตั้งค่า (ถ้าฐานไหนสถานะไม่น่าเชื่อถือ)
+     - กำลังรับบริการ = ovstost ตรวจรักษา… หรือ opd_dep_queue.accept_datetime หรือ ovst.cur_dep_busy = 'Y'
+       (ที่ ppbh cur_dep_busy เป็น 'N' ทั้งตาราง และ accept_datetime แทบไม่ถูกคีย์ จึงต้องพึ่ง ovstost)
+     - มาด้วยรถฉุกเฉิน/ส่งต่อ = ovst.ovstist (10 = EMS, 04 = รับต่อจากสถานพยาบาลอื่น, 05 = รับต่อจาก ER)
+     - เลขคิว = opd_qs_slot.queue_slot_number ของ visit (ไม่มีใช้ ovst.oqueue)
+     - เวลารอ = opd_dep_queue.queue_datetime → ovst.cur_dep_time → เวลาที่หน้านี้เห็นคนไข้ย้ายจุด
+     ===================================================================== */
+  const APP_NAME='BMS-DoctorQueue3D';
+  const PASTEJSON_URL='https://hosxp.net/phapi/PasteJSON';
+  const SID_PARAM='bms-session-id', LS_SID='dq3d.sid', LS_HOME_SID='bms3d.sid', LS_OPT='dq3d.opt.', LS_PREF='dq3d.pref';
+  /* PAGE_SIZE 2500: โรงพยาบาลใหญ่มี visit วันละ 5 พันกว่าใบ ถ้าหน้าละ 1000 ต้องยิง 6 รอบ (รอบละ ~2 วินาที)
+     แถวหนึ่งราว 180 ไบต์ → 2500 แถว ~450 KB ยังห่างจากเพดาน ~1.2 MB ที่ tunnel ตัดทิ้งเงียบ ๆ */
+  const TIMEOUT_MS=60000, URL_MAX=2000, PAGE_SIZE=2500, MAX_UNITS=5;
+  const LV_BG=['#1f8f52','#f2b705','#d1495b'], LV_FG=['#fff','#1b2a35','#fff'], DONE_C='#7b8a96';
+  const str=v=>(v==null?'':String(v).trim());
+  const sq=v=>"'"+String(v??'').replace(/['\\]/g,'')+"'";
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const val=(row,key)=>row[key]??row[key.toUpperCase()];
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const p2=n=>String(n).padStart(2,'0');
+  function todayYmd(){ const n=new Date(); return `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`; }
+  function fmtDT(ms){ const d=new Date(ms); return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`; }
+  function fmtMin(m){ if(m==null||m<0) return '–'; if(m<60) return m+' นาที'; const h=Math.floor(m/60), r=m%60; return r?`${h} ชม. ${r} นาที`:`${h} ชม.`; }
+  const hm=v=>{ const m=/(\d{1,2}):(\d{2})/.exec(str(v)); return m?p2(m[1])+':'+m[2]:''; };
+  /* เวลาใน HOSxP มาได้ทั้ง "10:22:31" และ "2026-11-23 10:22:31" → ms (ไม่มีวันที่ = วันที่ day) */
+  function parseDT(v,day){
+    const s=str(v); if(!s) return null;
+    const m=s.match(/(?:(\d{4})-(\d{2})-(\d{2})[ T])?(\d{1,2}):(\d{2})(?::(\d{2}))?/); if(!m) return null;
+    const [y,mo,d]=m[1]?[+m[1],+m[2],+m[3]]:day.split('-').map(Number);
+    const t=new Date(y,mo-1,d,+m[4],+m[5],+(m[6]||0)).getTime();
+    return Number.isFinite(t)?t:null;
+  }
+  function lsGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  function readJson(k){ try{ const o=JSON.parse(lsGet(k)||'null'); return o&&typeof o==='object'?o:null; }catch(e){ return null; } }
+
+  const L={mode:'sim', demo:false, conn:null, user:{}, pg:false, cols:{}, probed:false, db:'', engine:'', mkt:'',
+    ost:new Map(), ist:new Map(), dq:new Map(), dqOk:false, staleN:0, staleBy:new Map(),
+    dep:new Map(), rows:[], slots:new Map(), day:todayYmd(), busy:false, first:true, nextAt:0, err:'',
+    obs:new Map(), prevBusy:new Map(), av:new Map(), points:[], all:[], opt:null, stats:{t:0,e:0,busy:0,red:0}, renderedAt:0};
+  /* เกณฑ์สีเวลารอ ใช้ร่วมทุกฐานและโหมดจำลอง */
+  const pref={y:30,r:60};
+  { const s=readJson(LS_PREF); if(s&&s.y>0&&s.r>s.y&&s.r<=1440){ pref.y=Math.round(s.y); pref.r=Math.round(s.r); } }
+  const waitLevel=m=>m==null?0:m>=pref.r?2:m>=pref.y?1:0;
+  function defOpt(){ return {every:20, clinic:'', tri:'', room:'', slotOnly:false, stFilter:true, labSep:true, staleH:4, map:{}}; }
+  const optKey=()=>LS_OPT+(L.demo?'demo':(L.db||'-'));
+  function loadOpt(){
+    const o=defOpt(), s=readJson(optKey());
+    if(s){
+      if([10,20,30,60].includes(s.every)) o.every=s.every;
+      for(const k of ['clinic','tri','room']) if(typeof s[k]==='string') o[k]=s[k];
+      o.slotOnly=s.slotOnly===true;
+      o.stFilter=s.stFilter!==false;      // ค่าเริ่มต้นคือกรอง — ปิดได้เองในหน้าตั้งค่า
+      o.labSep=s.labSep!==false;
+      if(typeof s.staleH==='number'&&s.staleH>=0&&s.staleH<=48) o.staleH=s.staleH;
+      if(s.map&&typeof s.map==='object') o.map=s.map;
+    }
+    if(L.demo) o.every=5;            // ข้อมูลจำลองขยับเร็วให้เห็นการเดิน
+    L.opt=o;
+  }
+  function saveOpt(){ const o={...L.opt}; if(L.demo) o.every=5; lsSet(optKey(),JSON.stringify(o)); }
+
+  /* ---- เชื่อมต่อ HOSxP (แบบเดียวกับแอปคนไข้ OPD 3D) ---- */
+  /* เปิดผ่าน start.bat → ยิงผ่าน /proxy ของเครื่องตัวเอง เพราะ tunnel ไม่ตอบ CORS */
+  function proxied(u){
+    const direct=location.protocol==='file:'||/(^|\.)hosxp\.net$/i.test(location.hostname);
+    return direct?u:`${location.origin}/proxy?url=${encodeURIComponent(u)}`;
+  }
+  async function fetchJson(url,headers){
+    const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),TIMEOUT_MS);
+    try{
+      const res=await fetch(url,{headers:{Accept:'application/json',...(headers||{})},signal:ctrl.signal});
+      const text=await res.text(); let json=null; try{ json=JSON.parse(text); }catch(e){}
+      if(!json||typeof json!=='object') return {MessageCode:res.ok?0:res.status,http:res.status,empty:!text.trim(),nonJson:true,Message:`HTTP ${res.status} (${text.trim()?'ตอบกลับไม่ใช่ JSON':'ตอบกลับว่าง'})`};
+      if(json.MessageCode==null) json.MessageCode=res.status; json.http=res.status; return json;
+    }catch(e){ return {MessageCode:0,Message:e.name==='AbortError'?'หมดเวลารอ (timeout)':'Network: '+e.message,network:true}; }
+    finally{ clearTimeout(tid); }
+  }
+  function extractConn(data){
+    const r=data.result||{}, ui=r.user_info||{};
+    const kv=(r.key_value&&typeof r.key_value==='object')?r.key_value:{};
+    const apiUrl=kv['hosxp.api_url']||ui['hosxp.api_url']||ui.bms_url||'';
+    const authKey=kv['hosxp.api_auth_key']||ui['hosxp.api_auth_key']||ui.bms_session_code||(typeof r.key_value==='string'?r.key_value:'');
+    const clean=String(apiUrl).replace(/\/+$/,'').replace(/\/api(\/sql)?$/i,'').replace(/\/+$/,'');
+    return {apiUrl:clean,authKey:String(authKey||''),user:ui};
+  }
+  const isAuthErr=r=>!!r&&!r.network&&(r.MessageCode===401||/authoriz/i.test(String(r.Message||'')));
+  const ok=r=>!!r&&r.MessageCode===200&&Array.isArray(r.data);
+  function explain(r){
+    if(!r) return 'ไม่ทราบสาเหตุ';
+    if(r.network) return location.protocol==='file:'
+      ?'ส่งคำสั่งไม่ได้ เพราะเปิดไฟล์ตรงจากดิสก์ — ใช้ start.bat แล้วเปิดผ่าน http://localhost'
+      :'ส่งคำสั่งไป HOSxP ไม่ได้ ('+r.Message+') — ให้เปิดผ่าน start.bat';
+    if(isAuthErr(r)) return `Session หมดอายุหรือไม่ถูกต้อง (${r.MessageCode}) — ขอ session ID ใหม่จาก HOSxP`;
+    return `${r.MessageCode}: ${r.Message||'ผิดพลาด'}`;
+  }
+  const BUSY_CODES=[409,501,503,504];
+  const SQL_ERR_RE=/does not exist|doesn'?t exist|unknown (column|table|field)|no such (column|table)|syntax error|undefined (column|table|function)|ambiguous|validation/i;
+  let sqlChain=Promise.resolve();
+  function sql(text){ const job=()=>runSql(text); const p=sqlChain.then(job,job); sqlChain=p.catch(()=>{}); return p; }
+  async function runSql(text){
+    if(!L.conn) return {MessageCode:0,Message:'ยังไม่ได้เชื่อมต่อ'};
+    const s=text.replace(/\s+/g,' ').trim();
+    let target=`${L.conn.apiUrl}/api/sql?sql=${encodeURIComponent(s)}&app=${encodeURIComponent(APP_NAME)}`;
+    if(L.mkt) target+=`&marketplace-token=${encodeURIComponent(L.mkt)}`;
+    if(target.length>URL_MAX) return {MessageCode:414,Message:`คำสั่งยาว ${target.length} ตัวอักษร เกินที่ tunnel รับได้`};
+    let r;
+    for(let a=0;;a++){
+      r=await fetchJson(proxied(target),{Authorization:`Bearer ${L.conn.authKey}`});
+      const busy=!isAuthErr(r)&&!SQL_ERR_RE.test(String(r.Message||''))&&(r.empty||BUSY_CODES.includes(r.MessageCode)||BUSY_CODES.includes(r.http)||(r.network&&a<2));
+      if(!busy||a>=3) break;
+      await sleep(Math.min(1500,300*2**a)+Math.random()*150);
+    }
+    if(!ok(r)) console.warn(`[sql] ERR ${r.MessageCode} ${r.Message||''}\n${s}`);
+    if(isAuthErr(r)) sessionLost();
+    return r;
+  }
+  async function rows(text){ const r=await sql(text); return ok(r)?r.data:null; }
+  async function mustRows(text,what){ const r=await sql(text); if(!ok(r)) throw new Error(`${what}: ${explain(r)}`); return r.data; }
+  /* คำตอบใหญ่เกิน ~1.2 MB ถูกตัดเงียบ ๆ → แบ่งหน้าแบบ keyset */
+  async function keyset(build,idOf,what){
+    let all=[],cur=null;
+    for(let guard=0;guard<100;guard++){
+      const page=await mustRows(build(cur),what); all=all.concat(page);
+      if(page.length<PAGE_SIZE) break;
+      const next=idOf(page[page.length-1]); if(next==null||next===cur) break; cur=next;
+    }
+    return all;
+  }
+  async function probeSchema(){
+    const list=['ovst','opd_qs_slot','kskdepartment','opd_dep_queue','ovstost','ovstist'].map(sq).join(',');
+    const r=await rows(`SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = ${L.pg?'current_schema()':'DATABASE()'} AND table_name IN (${list})`);
+    const cols={};
+    (r||[]).forEach(x=>{ const t=str(val(x,'t')).toLowerCase(), c=str(val(x,'c')).toLowerCase(); if(t&&c) (cols[t]=cols[t]||new Set()).add(c); });
+    L.cols=cols; L.probed=!!(r&&r.length);
+  }
+  const has=(t,c)=>!L.probed?true:!!(L.cols[t]&&L.cols[t].has(c));
+  const hasTable=t=>!L.probed?true:!!L.cols[t];
+
+  /* ---- แผนก HOSxP → จุดบนจอ (T = จุดซักประวัติ, E = ห้องตรวจ, '' = ไม่ใช่สองจุดนี้) ---- */
+  function guessKind(name){
+    const n=str(name);
+    if(!n||/หลังพบแพทย์|หลังตรวจ|กลับบ้าน/.test(n)) return '';
+    if(/ซักประวัติ|คัดกรอง|screen|triage|จุดแรกรับ/i.test(n)) return 'T';
+    if(/ห้องตรวจ|ห้องแพทย์|พบแพทย์|examination/i.test(n)) return 'E';
+    return '';
+  }
+  function kindOf(cd){
+    if(!cd) return '';
+    const m=L.opt.map[cd];
+    if(m==='T'||m==='E') return m;
+    if(m==='-') return '';
+    return guessKind(L.dep.get(cd));
+  }
+  function svcKeyOf(cd){
+    const n=L.dep.get(cd)||'';
+    if(/การเงิน|ชำระ|เก็บเงิน|cashier|finance/i.test(n)) return 'finance';
+    if(/ห้องยา|เภสัช|จ่ายยา|pharm/i.test(n)) return 'pharmacy';
+    if(/แล็บ|แลบ|lab|ชันสูตร|เจาะเลือด/i.test(n)) return 'lab';
+    return '';
+  }
+  const depLabel=cd=>cd?(L.dep.get(cd)||'แผนก '+cd):'ไม่ระบุ';
+  /* ป้ายโต๊ะซักประวัติเล็ก → ตัดคำนำหน้าออก ให้เหลือชื่อคลินิกเป็นบรรทัดรอง */
+  const triSub=name=>str(name).replace(/^(จุด)?\s*(ซักประวัติ|คัดกรอง)\s*/,'')||'';
+
+  /* ---- สถานะ visit (ovst.ovstost) → ความหมายที่จอนี้ใช้ ----
+     out  = พ้นจุดนี้ไปแล้ว (ตรวจแล้ว/ไปห้องยา-การเงิน/ไม่รอ/Admit/ส่งต่อ/เสียชีวิต) · lab = ยังอยู่ แต่รอผลตรวจ
+     busy = กำลังตรวจรักษาอยู่ · wait = รออยู่จริง (รวมกรณียังไม่มีสถานะ)
+     ดูชื่อสถานะจากตาราง ovstost ก่อน เพราะรหัสอาจต่างกันในแต่ละโรงพยาบาล แล้วค่อยใช้รหัสมาตรฐานสำรอง */
+  const ST_OUT=new Set(['01','02','14','16','17','18','19','20','21','52','54','97','98','99']);
+  const ST_LAB=new Set(['00']), ST_BUSY=new Set(['61','62','63']);
+  /* ชื่อสถานะต่างกันมากในแต่ละโรงพยาบาล (พระพุทธบาทมี 19 แบบ หาดใหญ่มี 37 แบบ รหัสก็คนละชุด)
+     กลุ่ม "พ้นจุดนี้แล้ว" = ตรวจเสร็จ / ไปห้องยา-การเงิน / ไม่รอ / Admit / ส่งต่อ / เลื่อนนัด / เสียชีวิต */
+  const RE_ST_OUT=/ไม่รอ|ป[ฎฏ]ิเสธ|หนีกลับ|ตรวจแล้ว|รับยา|จัดยา|เช็คยา|รอยา|ใบสั่งยา|ปรึกษายา|ค้างรับ|ชำระ|การเงิน|เลื่อนนัด|ยกเลิกนัด|กลับบ้าน|จำหน่าย|admit|ผู้ป่วยใน|สังเกต|ส่งต่อ|refer|เสียชีวิต|ตาย/i;
+  const RE_ST_LAB=/รอผล/;
+  const RE_ST_BUSY=/ตรวจรักษา|กำลังตรวจ|กำลังรับบริการ|อยู่ในห้องตรวจ/;
+  function stKind(code){
+    const c=str(code); if(!c) return 'wait';
+    const n=L.ost.get(c)||'';
+    if(n){
+      if(RE_ST_OUT.test(n)) return 'out';
+      if(RE_ST_LAB.test(n)) return 'lab';
+      if(RE_ST_BUSY.test(n)) return 'busy';
+    }
+    if(ST_OUT.has(c)) return 'out';
+    if(ST_LAB.has(c)) return 'lab';
+    if(ST_BUSY.has(c)) return 'busy';
+    return 'wait';
+  }
+  const stName=code=>{ const c=str(code); return c?(L.ost.get(c)||'สถานะ '+c):''; };
+  const isLab=it=>!!L.opt.labSep&&it.st==='lab';
+  /* พ้นห้องตรวจแล้ว + สถานะบอกว่าไปไหนต่อ → ให้เดินไปเคาน์เตอร์นั้นก่อนออกจากฉาก */
+  function stSvcOf(it){
+    const n=L.ost.get(str(it.os))||'';
+    if(/^\s*ไม่รอ/.test(n)) return '';
+    if(/รับยา/.test(n)) return 'pharmacy';
+    if(/ชำระ|การเงิน/.test(n)) return 'finance';
+    if(/รอผล|แล็บ|lab/i.test(n)) return 'lab';
+    return '';
+  }
+  /* มาด้วยรถฉุกเฉิน / ถูกส่งต่อมา (ovst.ovstist) — ใช้เรียกรถพยาบาลมาส่งหน้าอาคาร */
+  const RE_IST_ER=/EMS|ฉุกเฉิน|emergency|สถานพยาบาลอื่น|ส่งต่อ|refer/i;
+  function isErArrival(it){
+    const n=L.ist.get(str(it&&it.ist))||'';
+    if(n&&RE_IST_ER.test(n)) return true;
+    return /ER|ฉุกเฉิน|อุบัติเหตุ/i.test(L.dep.get(str(it&&it.md))||'');
+  }
+
+  /* ---- SQL ---- */
+  function visitSql(day,cur){
+    const c=k=>has('ovst',k)?'v.'+k:'NULL';
+    return `SELECT v.vn AS vn, v.hn AS hn, v.vsttime AS vt, v.cur_dep AS cd, ${c('cur_dep_busy')} AS cb, ${c('cur_dep_time')} AS ct,
+      ${c('main_dep')} AS md, ${c('an')} AS an, ${c('oqueue')} AS q, ${c('ovstost')} AS os, ${c('ovstist')} AS ist
+      FROM ovst v WHERE v.vstdate = ${sq(day)} ${cur!=null?`AND v.vn > ${sq(cur)}`:''} ORDER BY v.vn LIMIT ${PAGE_SIZE}`;
+  }
+  const hasSlot=()=>hasTable('opd_qs_slot')&&has('opd_qs_slot','queue_slot_number')&&has('opd_qs_slot','vn');
+  /* คิวจาก opd_qs_slot ของวันนี้: vn → {no: เลขคิว, st: เวลาของช่องคิว} */
+  async function loadSlots(day){
+    const m=new Map(); if(!hasSlot()) return m;
+    const byDate=has('opd_qs_slot','schedule_date');
+    const st=has('opd_qs_slot','start_time')?'q.start_time':'NULL';
+    const where=byDate?`q.schedule_date = ${sq(day)} AND q.vn IS NOT NULL AND q.vn <> ''`:`v.vstdate = ${sq(day)}`;
+    let cur=null;
+    for(let guard=0;guard<50;guard++){
+      const page=await rows(`SELECT q.opd_qs_slot_id AS i, q.vn AS vn, q.queue_slot_number AS no, ${st} AS st FROM opd_qs_slot q
+        ${byDate?'':'JOIN ovst v ON v.vn = q.vn'} WHERE ${where} ${cur!=null?`AND q.opd_qs_slot_id > ${Number(cur)}`:''} ORDER BY q.opd_qs_slot_id LIMIT ${PAGE_SIZE}`);
+      if(!page) break;
+      page.forEach(r=>{ const vn=str(val(r,'vn')), no=str(val(r,'no')); if(vn&&no) m.set(vn,{no,st:hm(val(r,'st'))}); });
+      if(page.length<PAGE_SIZE) break;
+      const next=Number(val(page[page.length-1],'i')); if(!next||next===cur) break; cur=next;
+    }
+    return m;
+  }
+
+  /* ---- แถวที่ยังไม่ปิดงานใน opd_dep_queue ของวันนี้: "vn|แผนก" → {qt: เวลาเข้าแผนก, at: เวลาที่แผนกรับ} ----
+     ดึงเฉพาะแถวที่ finish_datetime ว่าง (วันปกติเหลือราว 2 พันแถวจากทั้งหมด 5 พัน) · ดึงไม่สำเร็จ = ไม่กรองใครเลย */
+  const hasDq=()=>hasTable('opd_dep_queue')&&has('opd_dep_queue','vn')&&has('opd_dep_queue','depcode')
+    &&has('opd_dep_queue','finish_datetime')&&has('opd_dep_queue','opd_dep_queue_id');
+  /* แผนกที่ต้องถามคิว = แผนกของคนไข้ในรอบนี้ที่เป็นจุดซักประวัติ/ห้องตรวจเท่านั้น
+     โรงพยาบาลใหญ่มีแถวค้างทั้งวันเป็นหมื่น (หาดใหญ่ 25/11: 13,946 แถว) ถ้าไม่จำกัดแผนกจะดึงกันทั้งวันไม่จบ
+     ส่วนรายชื่อแผนกทั้งตาราง kskdepartment ก็ยาวเกินไป (ที่นั่นมีหลายร้อย) จึงเอาจาก visit ของรอบนี้ */
+  function shownDeps(rows){
+    const seen=new Set();
+    for(const r of rows||[]){ const cd=str(val(r,'cd')); if(cd&&!seen.has(cd)&&kindOf(cd)) seen.add(cd); }
+    for(const c of Object.keys((L.opt&&L.opt.map)||{})) if(c&&kindOf(c)) seen.add(c);
+    return [...seen];
+  }
+  async function loadDq(day, visits){
+    const m=new Map(); L.dqOk=false;
+    if(!hasDq()) return m;
+    const qt=has('opd_dep_queue','queue_datetime')?'q.queue_datetime':'NULL';
+    const at=has('opd_dep_queue','accept_datetime')?'q.accept_datetime':'NULL';
+    const deps=shownDeps(visits), chunks=[];
+    for(let i=0;i<deps.length;i+=80) chunks.push(deps.slice(i,i+80));   // 80 รหัส/คำสั่ง กัน URL ยาวเกินที่ tunnel รับ
+    if(!chunks.length) chunks.push(null);                              // เดาแผนกไม่ออก → ดึงทั้งวัน (ช้ากว่ามาก)
+    let ok=true;
+    for(const chunk of chunks){
+      const only=chunk?` AND q.depcode IN (${chunk.map(sq).join(',')})`:'';
+      let cur=null;
+      for(let guard=0;guard<30;guard++){
+        const page=await rows(`SELECT q.opd_dep_queue_id AS i, q.vn AS vn, q.depcode AS cd, ${qt} AS qt, ${at} AS at
+          FROM opd_dep_queue q JOIN ovst v ON v.vn = q.vn
+          WHERE v.vstdate = ${sq(day)} AND q.finish_datetime IS NULL${only}
+          ${cur!=null?`AND q.opd_dep_queue_id > ${Number(cur)}`:''} ORDER BY q.opd_dep_queue_id LIMIT ${PAGE_SIZE}`);
+        if(!page){ ok=false; break; }
+        page.forEach(r=>{ const vn=str(val(r,'vn')), cd=str(val(r,'cd')); if(vn&&cd) m.set(vn+'|'+cd,{qt:val(r,'qt'),at:str(val(r,'at'))}); });
+        if(page.length<PAGE_SIZE) break;
+        const next=Number(val(page[page.length-1],'i')); if(!next||next===cur) break; cur=next;
+      }
+      if(!ok) break;
+    }
+    L.dqOk=ok;
+    return m;
+  }
+  function stSupportText(){
+    if(L.demo) return 'ข้อมูลจำลอง: สถานะ visit เป็นค่าสมมุติ';
+    const a=[hasDq()?('opd_dep_queue: ใช้ได้'+(L.dqOk?` (ยังค้างอยู่ ${L.dq.size} แถว)`:' (ยังไม่ได้ดึงรอบนี้)')):'opd_dep_queue: ไม่มีในฐานนี้',
+      has('ovst','ovstost')?`ovst.ovstost: ใช้ได้ (${L.ost.size} สถานะ)`:'ovst.ovstost: ไม่มีในฐานนี้'];
+    return a.join(' · ');
+  }
+
+  /* ---- สถานะบนหน้าจอ ---- */
+  function setStatus(text){ $('statusText').textContent=text; $('statusText').title=text; }
+  function setLiveBadge(kind){ const b=$('live'); b.className='live'+(kind?' '+kind:''); b.textContent=kind==='on'?'LIVE':kind==='demo'?'DEMO':kind==='off'?'OFF':'จำลอง'; }
+  function showConn(title,msg,isErr){
+    $('connTitle').textContent=title; $('connMsg').textContent=msg; $('connMsg').className=isErr?'err':'';
+    $('ovConn').hidden=false; setTimeout(()=>$('sid').focus(),50);
+  }
+  async function connect(sid){
+    setStatus('กำลังเชื่อมต่อ…');
+    const data=await fetchJson(proxied(`${PASTEJSON_URL}?Action=GET&code=${encodeURIComponent(sid)}`));
+    if(data.MessageCode!==200){
+      const msg=data.network?explain(data):data.nonJson?`hosxp.net ตอบกลับผิดรูปแบบ (HTTP ${data.MessageCode})`:`Session ใช้ไม่ได้: ${data.Message||data.MessageCode}`;
+      setStatus('เชื่อมต่อไม่ได้'); showConn('เชื่อมต่อไม่สำเร็จ',msg,true); return;
+    }
+    const c=extractConn(data);
+    if(!c.apiUrl||!c.authKey){ setStatus('Session ไม่มีข้อมูล API'); showConn('Session ไม่สมบูรณ์','Session ถูกต้องแต่ไม่มี api_url / auth key สำหรับ /api/sql',true); return; }
+    L.conn={apiUrl:c.apiUrl,authKey:c.authKey}; L.user=c.user||{}; L.demo=false;
+    const v=await sql('SELECT version() AS v');
+    if(!ok(v)){ L.conn=null; setStatus('ส่ง SQL ไม่ผ่าน'); showConn('เชื่อมต่อฐานข้อมูลไม่ได้',explain(v),true); return; }
+    lsSet(LS_SID,sid);
+    const ver=str(v.data[0]&&val(v.data[0],'v'));
+    L.pg=ver?/postgre/i.test(ver):/postgre/i.test(str(L.user.bms_database_type));
+    L.engine=(L.pg?'PostgreSQL ':'MySQL ')+((ver.match(/\d+\.\d+/)||[''])[0]);
+    L.db=str(L.user.bms_database_name)||c.apiUrl.replace(/^https?:\/\//,'');
+    await probeSchema();
+    if(!hasTable('ovst')||!has('ovst','cur_dep')){
+      L.conn=null; setStatus('ฐานข้อมูลไม่รองรับ');
+      showConn('ฐานข้อมูลไม่รองรับ','ไม่พบตาราง ovst หรือคอลัมน์ ovst.cur_dep (แผนกที่คนไข้อยู่ตอนนี้) จึงบอกไม่ได้ว่าคนไข้อยู่จุดไหน',true); return;
+    }
+    L.dep=new Map();
+    (await rows('SELECT depcode AS c, department AS n FROM kskdepartment')||[]).forEach(r=>L.dep.set(str(val(r,'c')),str(val(r,'n'))));
+    L.ost=new Map(); L.ist=new Map(); L.dq=new Map(); L.dqOk=false;
+    if(hasTable('ovstost')&&has('ovstost','name'))
+      (await rows('SELECT ovstost AS c, name AS n FROM ovstost')||[]).forEach(r=>L.ost.set(str(val(r,'c')),str(val(r,'n'))));
+    if(hasTable('ovstist')&&has('ovstist','name'))
+      (await rows('SELECT ovstist AS c, name AS n FROM ovstist')||[]).forEach(r=>L.ist.set(str(val(r,'c')),str(val(r,'n'))));
+    const hosp=str(L.user.location)||L.db;
+    enterLive(`${hosp} · ${L.db} · ${L.engine}`);
+    if(!hasSlot()) showToast('ฐานนี้ไม่มี opd_qs_slot — ใช้เลขคิว ovst.oqueue แทน',5000);
+    else if(!hasDq()&&!has('ovst','ovstost')) showToast('ฐานนี้ไม่มีทั้ง opd_dep_queue และ ovst.ovstost — ตัดคนที่พ้นห้องตรวจไปแล้วออกไม่ได้ ตัวเลขคนรอจะสูงกว่าจริง',7000);
+    else if(!hasDq()) showToast('ฐานนี้ไม่มี opd_dep_queue — ใช้ ovst.ovstost ตัดคนที่พ้นห้องตรวจไปแล้วออกอย่างเดียว',5000);
+    else if(!has('ovst','ovstost')) showToast('ฐานนี้ไม่มี ovst.ovstost — ใช้ opd_dep_queue อย่างเดียว บอกไม่ได้ว่าใครรอผลตรวจ',5000);
+  }
+  function sessionLost(){
+    if(!L.conn) return;
+    L.conn=null; lsDel(LS_SID); setLiveBadge('off'); setStatus('Session หมดอายุ');
+    showConn('Session หมดอายุ','Session ถูกยกเลิกหรือหมดเวลา — วาง session ID ใหม่เพื่อแสดงคิวต่อ',true);
+  }
+
+  /* ---- สลับเข้าโหมดข้อมูลจริง: ล้างคนไข้จำลองทั้งหมด ---- */
+  function clearAgents(){
+    for(const p of patients){ scene.remove(p.obj); p.tagTex.dispose(); p.tag.material.dispose(); p.dead=true; }
+    patients.length=0; L.av.clear();
+    for(const s of [...seatsT,...seatsE]) s.occ=false;
+    for(const u of [...desks,...rooms]){ u.patient=null; u.closing=false; }
+    for(const s of SVCS){ s.queue=[]; s.busy=false; }
+  }
+  function enterLive(subtitle){
+    const first=L.mode!=='live';
+    L.mode='live'; L.first=true; L.obs.clear(); L.prevBusy.clear(); L.day=todayYmd();
+    clearAgents(); calls.length=0;
+    for(const u of [...desks,...rooms]){ u.cd=null; u.point=null; u.signName=null; }
+    loadOpt();
+    $('hint').textContent=subtitle+' · ลากเพื่อหมุน • ล้อเมาส์ซูม';
+    $('story').hidden=true; $('queue').hidden=false; $('simCtl').hidden=true; $('filters').hidden=false; $('btnSet').hidden=false;
+    $('btnConn').textContent=L.demo?'ต่อ HOSxP จริง':'เปลี่ยน Session';
+    $('lT').textContent='รอซักประวัติ'; $('lE').textContent='รอพบแพทย์'; $('lS').textContent='กำลังรับบริการ';
+    renderLegend();
+    setLiveBadge(L.demo?'demo':'on');
+    if(first&&!playing) setPlaying(true);
+    L.nextAt=0; L.busy=false;
+    load();
+  }
+
+  /* ---- ดึงข้อมูลรอบละครั้ง ---- */
+  async function load(){
+    if(L.busy||L.mode!=='live'||(!L.conn&&!L.demo)) return;
+    L.busy=true; setStatus('กำลังดึงข้อมูล…');
+    try{
+      if(todayYmd()!==L.day){ L.day=todayYmd(); L.obs.clear(); L.prevBusy.clear(); L.first=true; clearAgents(); }
+      if(L.demo) demoTick();
+      else{
+        const day=L.day;
+        const vis=await keyset(c=>visitSql(day,c),r=>str(val(r,'vn'))||null,'visit วันนี้ (ovst)');
+        const slots=await loadSlots(day);
+        const dq=L.opt.stFilter?await loadDq(day,vis):new Map();
+        if(day!==L.day||L.mode!=='live') return;
+        L.rows=vis; L.slots=slots; L.dq=dq;
+      }
+      liveSync();
+      L.err='';
+      const d=new Date();
+      setStatus((L.demo?'ข้อมูลจำลอง':(str(L.user.name)||'เชื่อมต่อแล้ว'))+` · ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`);
+    }catch(e){
+      L.err=e.message; console.error(e);
+      if(L.conn) setStatus('ดึงข้อมูลไม่สำเร็จ');
+      showToast('ดึงข้อมูลไม่สำเร็จ: '+e.message,5000);
+    }finally{
+      L.busy=false;
+      const every=L.opt?L.opt.every:20;
+      L.nextAt=Date.now()+(L.err?Math.min(every,10):every)*1000;
+    }
+  }
+
+  /* ---- ข้อมูล → จุดบริการ → ตัวละคร ---- */
+  function buildItems(){
+    const now=Date.now(), first=L.first, items=[];
+    const staleMs=Math.max(0,+(L.opt.staleH||0))*3600000;
+    L.staleN=0; L.staleBy=new Map();
+    for(const r of L.rows){
+      const vn=str(val(r,'vn')); if(!vn) continue;
+      const cd=str(val(r,'cd')), an=str(val(r,'an'));
+      const slot=L.slots.get(vn)||null;
+      const ct=parseDT(val(r,'ct'),L.day);
+      /* ไม่มี cur_dep_time → นับจากที่เห็นคนไข้ย้ายจุด (รอบแรกใช้เวลามาถึง vsttime) */
+      let ob=L.obs.get(vn);
+      if(!ob||ob.cd!==cd){ ob={cd,t:first?(parseDT(val(r,'vt'),L.day)||now):now}; L.obs.set(vn,ob); }
+      const oq=str(val(r,'q'));
+      /* แถวที่ยังไม่ปิดงานของ (vn, แผนกนี้) — ไม่มี = แผนกนั้นปิดงานคนไข้รายนี้แล้ว (หรือไม่เคยมีคิวที่แผนกนี้) */
+      const dq=cd?(L.dq.get(vn+'|'+cd)||null):null;
+      const os=str(val(r,'os')), sk=stKind(os);
+      const qt=dq?parseDT(dq.qt,L.day):null;
+      const since=qt||ct||ob.t;
+      const kind=an?'':kindOf(cd);
+      /* สถานะบอกว่าพ้นจุดไปแล้ว / แผนกปิดงานแล้ว */
+      const gone=!!(L.opt.stFilter&&(sk==='out'||(L.dqOk&&cd&&!dq)));
+      /* ค้างนานผิดปกติ: ไม่มีใครปิดคิวแผนกและไม่อัปเดตสถานะ — ถือว่าไม่อยู่แล้ว (0 = ไม่ตัด) */
+      const stale=!gone&&staleMs>0&&since&&(now-since)>staleMs;
+      if(stale&&kind){ L.staleN++; L.staleBy.set(cd,(L.staleBy.get(cd)||0)+1); }
+      items.push({vn, hn:str(val(r,'hn')), cd, md:str(val(r,'md')), an, os, ist:str(val(r,'ist')),
+        kind, st:sk, out:gone||!!stale, stale:!!stale,
+        busy:str(val(r,'cb')).toUpperCase()==='Y'||sk==='busy'||!!(dq&&dq.at),
+        slot, label:slot?slot.no:(oq||'HN '+str(val(r,'hn')).slice(-4)), since, vt:parseDT(val(r,'vt'),L.day)});
+    }
+    return items;
+  }
+  /* จุดที่แสดงในฉากมีได้อย่างละ 5 — จุดเดิมอยู่ที่เดิม (ไม่สลับโต๊ะไปมา) จุดใหม่ได้โต๊ะว่างตามจำนวนคนไข้ */
+  function assignUnits(units,list){
+    const want=new Set(list.map(p=>p.cd));
+    for(const u of units) if(u.cd&&!want.has(u.cd)) u.cd=null;
+    const shown=new Set(units.map(u=>u.cd).filter(Boolean));
+    const rest=list.filter(p=>!shown.has(p.cd)).sort((a,b)=>b.items.length-a.items.length);
+    for(const u of units){ if(u.cd) continue; const p=rest.shift(); if(!p) break; u.cd=p.cd; }
+    const byCd=new Map(list.map(p=>[p.cd,p]));
+    let any=false;
+    for(const u of units){ u.point=u.cd?byCd.get(u.cd)||null:null; if(u.point) u.point.unit=u; u.active=!!u.point; any=any||u.active; }
+    if(!any) units[0].active=true;      // ไม่มีจุดไหนมีคนไข้ ก็ยังโชว์โต๊ะ/ห้องว่างไว้ 1 ชุด
+  }
+  function liveSync(){
+    const instant=L.first; L.first=false;
+    const O=L.opt;
+    if(instant){ clearAgents(); for(const u of [...desks,...rooms]) u.cd=null; }   // เปลี่ยนตัวกรอง → จัดโต๊ะ/ห้องเรียงใหม่
+    const items=buildItems();
+    L.all=items;
+    /* จุดของคนไข้ที่ผ่านตัวกรองคลินิก */
+    const pts=new Map();
+    const pointOf=(cd,kind)=>{ let p=pts.get(cd); if(!p){ p={cd,kind,name:depLabel(cd),items:[],unit:null}; pts.set(cd,p); } return p; };
+    for(const it of items){
+      if(!it.kind) continue;
+      if(it.out) continue;                       // พ้นจุดนี้ไปแล้ว (แผนกปิดงาน / สถานะ visit ไปขั้นต่อไป)
+      if(O.slotOnly&&!it.slot) continue;
+      if(O.clinic&&it.md!==O.clinic) continue;
+      pointOf(it.cd,it.kind).items.push(it);
+    }
+    if(O.tri&&kindOf(O.tri)==='T') pointOf(O.tri,'T');     // จุดที่เลือกไว้ยังโชว์แม้ไม่มีคนไข้
+    if(O.room&&kindOf(O.room)==='E') pointOf(O.room,'E');
+    const byName=(a,b)=>a.name.localeCompare(b.name,'th');
+    let T=[...pts.values()].filter(p=>p.kind==='T').sort(byName);
+    let E=[...pts.values()].filter(p=>p.kind==='E').sort(byName);
+    if(O.tri) T=T.filter(p=>p.cd===O.tri);
+    if(O.room) E=E.filter(p=>p.cd===O.room);
+    for(const p of [...T,...E]) p.items.sort((a,b)=>(b.busy-a.busy)||(isLab(a)-isLab(b))||(a.since-b.since));
+    L.points=[...T,...E];
+    assignUnits(desks.slice(0,MAX_UNITS),T);
+    assignUnits(rooms.slice(0,MAX_UNITS),E);
+    for(const d of desks){
+      const name=d.point?d.point.name:'ไม่มีคนไข้';
+      if(d.signName!==name){ d.signName=name; const sub=d.point?triSub(name):'';
+        redrawSign(d.sign,{bg:'#2a9d8f', accent:'#ffd166', title:sub?'ซักประวัติ':name, sub:sub||undefined}); }
+    }
+
+    /* เป้าหมายของแต่ละ visit: โต๊ะ/ห้อง (กำลังรับบริการ คนแรก) หรือเก้าอี้รอ */
+    const goals=[];
+    for(const [units,unitType,seatType] of [[desks,'desk','seatT'],[rooms,'room','seatE']]){
+      for(const u of units){
+        if(!u.point) continue;
+        let taken=false;
+        for(const it of u.point.items){
+          if(it.busy&&!taken){ taken=true; goals.push({it,g:{type:unitType,u}}); }
+          else goals.push({it,g:{type:seatType}});
+        }
+      }
+    }
+    goals.sort((a,b)=>(b.g.type==='desk'||b.g.type==='room')-(a.g.type==='desk'||a.g.type==='room')||(a.it.since-b.it.since));
+    const goalVn=new Map(goals.map(x=>[x.it.vn,x]));
+    const itemVn=new Map(items.map(it=>[it.vn,it]));
+
+    /* ถูกเรียกเข้าห้องตรวจ (cur_dep_busy เปลี่ยนเป็น Y) → ขึ้นจอเรียกคิว */
+    for(const it of items){
+      const key=it.cd+'|'+(it.busy?'Y':'N'), prev=L.prevBusy.get(it.vn);
+      if(!instant&&it.busy&&it.kind==='E'&&prev!==key){
+        const pt=pts.get(it.cd);
+        if(pt&&pt.unit) announce(it.label,pt.name);
+      }
+      L.prevBusy.set(it.vn,key);
+    }
+
+    /* คนที่ไม่อยู่ในจุดที่แสดงแล้ว: ถูกส่งต่อไปการเงิน/ยา/แล็บ หรือกลับบ้าน · ถูกกรองออก → ค่อย ๆ หายไป */
+    for(const p of patients){
+      if(p.dead||p.leaving||!p.vn) continue;
+      if(goalVn.has(p.vn)) continue;
+      const it=itemVn.get(p.vn);
+      if(!it||(it.kind&&!it.out)) p.want={type:'fade'};
+      else p.want={type:'leave', key:svcKeyOf(it.cd)||stSvcOf(it)};
+      applyWant(p);
+    }
+    /* คนที่อยู่ในจุดที่แสดง */
+    const free={seatT:seatsT.filter(s=>!s.occ).length, seatE:seatsE.filter(s=>!s.occ).length};
+    for(const {it,g} of goals){
+      let p=L.av.get(it.vn);
+      if(p&&(p.dead||p.leaving)) p=null;
+      if(!p){
+        const unitFree=(g.type==='desk'||g.type==='room')&&!g.u.patient;
+        const pool=g.type==='desk'?'seatT':g.type==='room'?'seatE':g.type;
+        if(!unitFree&&free[pool]<=0) continue;          // เก้าอี้เต็ม → ไม่วาดตัวละคร (ยังอยู่ในรายการคิว)
+        if(!unitFree) free[pool]--;
+        p=createPatient(0,it.label); p.vn=it.vn; p.it=it; p.since=it.since; p.tagKind='live';
+        L.av.set(it.vn,p); patients.push(p);
+        if(instant){ p.want=g; placeWant(p); }
+        else {
+          p.loc={type:'door'}; p.yaw=p.targetYaw=PI; p.want=g;
+          /* มาด้วยรถฉุกเฉิน/ถูกส่งต่อมา และเพิ่งมาถึงไม่เกิน 90 นาที → รถพยาบาลมาส่งถึงหน้าอาคาร */
+          const amb=(isErArrival(it)&&it.vt&&Date.now()-it.vt<90*60000)?ambArrival(()=>{ if(!p.dead) applyWant(p); }):null;
+          if(amb){ p.obj.position.copy(V3(amb.x,amb.z)); waitFor(p,45,()=>{ if(!p.dead) applyWant(p); }); }
+          else { p.obj.position.copy(V3(0.3,14.9)); applyWant(p); }
+        }
+      } else {
+        p.it=it; p.since=it.since; p.want=g;
+        if(p.label!==it.label){ p.label=it.label; p.tagKey=null; }
+        applyWant(p);
+      }
+      retag(p);
+    }
+    liveStats(); renderQueue(); fillFilters();
+  }
+
+  /* ---- การเดินในโหมดข้อมูลจริง: ทุกที่มีทางออกไปทางเดินหลัก (W/N/S) แล้วเดินตามทางเดิน ---- */
+  const HUBS=[V3(-12.5,1.5),V3(-1.2,1.5),V3(-1.2,-2.6)];   // ตะวันตก (ฝั่งซักประวัติ) · กลางโถง · หน้าห้องตรวจ
+  function locInfo(loc){
+    switch(loc.type){
+      case 'seatT': { const s=loc.s; return {hub:0, legs:[s.pos, V3(s.x,s.aisle), V3(-12.5,s.aisle)], yaw:PI, sit:true}; }
+      case 'desk':  { const d=loc.u; return {hub:0, legs:[d.pos, V3(-15,d.z)], yaw:-HP, sit:true}; }
+      case 'seatE': { const s=loc.s; return {hub:1, legs:[s.pos, V3(s.x,s.aisle), V3(0.4,s.aisle)], yaw:PI, sit:true}; }
+      case 'room':  { const r=loc.u; return {hub:2, legs:[r.pos, V3(r.c,-7.4), V3(r.c,-6.3)], yaw:PI, sit:true}; }
+      case 'svc':   return {hub:2, legs:[V3(9.5,-2.6)]};
+      default:      return {hub:1, legs:[V3(0.3,14.9), V3(0.3,13.4), V3(-1.2,10)], yaw:PI};   // ประตูทางเข้า (นอกประตูนิดเดียว เว้นที่ให้รถจอดรับ-ส่ง)
+    }
+  }
+  function route(from,to){
+    const A=locInfo(from), B=locInfo(to), pts=A.legs.slice(1).map(v=>v.clone());
+    if(A.hub!==B.hub){ const st=A.hub<B.hub?1:-1; for(let h=A.hub;;h+=st){ pts.push(HUBS[h].clone()); if(h===B.hub) break; } }
+    for(let i=B.legs.length-1;i>=0;i--) pts.push(B.legs[i].clone());
+    return pts;
+  }
+  function claim(loc,p){ if(!loc) return; if(loc.s) loc.s.occ=true; if(loc.u) loc.u.patient=p; }
+  function release(loc,p){ if(!loc) return; if(loc.s) loc.s.occ=false; if(loc.u&&loc.u.patient===p) loc.u.patient=null; }
+  function settle(p){
+    const t=p.loc&&p.loc.type;
+    if(t==='seatT'||t==='seatE'){ sit(p,PI); p.state='wait'; }
+    else if(t==='desk'){ sit(p,-HP); p.state='triage'; }
+    else if(t==='room'){ sit(p,PI); p.state='exam'; }
+  }
+  function liveMove(p,to,after){
+    const from=p.loc||{type:'door'};
+    release(p.loc,p); claim(to,p); p.loc=to;
+    p.state=to.type==='room'?'toRoom':'walk';
+    walkTo(p,route(from,to),()=>{ settle(p); if(after) after(); else applyWant(p); });
+  }
+  function fadeOut(p){ release(p.loc,p); p.loc=null; p.leaving=true; p.want=null; p.state='gone'; p.fade=1; }
+  function leaveTo(p,key){
+    p.leaving=true; p.want=null; setTag(p,'after');
+    if(key&&SV[key]){ liveMove(p,{type:'svc'},()=>{ p.loc=null; p.route=[key]; p.fromCounter=false; goNext(p); }); return; }
+    const ride=takeRide();                                   // รถมารับหน้าอาคาร (ถ้าช่องจอดว่าง)
+    liveMove(p,{type:'door'},()=>{
+      p.loc=null;
+      if(!ride){ p.state='gone'; p.fade=1; return; }
+      walkTo(p,[V3(ride.x,ride.z)],()=>{ p.state='gone'; p.fade=1; ride.done(); });
+    });
+  }
+  const seatFor=type=>(type==='seatT'?seatsT:seatsE).find(s=>!s.occ);
+  /* ทำตามเป้าหมาย (ถ้ากำลังเดินอยู่ รอเดินถึงก่อนแล้วค่อยทำ — กันเดินทะลุเฟอร์นิเจอร์) */
+  function applyWant(p){
+    const w=p.want; if(!w||p.leaving||p.dead||p.mode==='walk') return;
+    if(w.type==='fade'){ fadeOut(p); return; }
+    if(w.type==='leave'){ leaveTo(p,w.key); return; }
+    const cur=p.loc;
+    if(w.type==='desk'||w.type==='room'){
+      if(cur&&cur.u===w.u) return;
+      if(!w.u.patient){ liveMove(p,{type:w.type,u:w.u}); return; }
+    }
+    const seatType=w.type==='desk'?'seatT':w.type==='room'?'seatE':w.type;
+    if(cur&&cur.type===seatType) return;            // นั่งรออยู่ถูกโซนแล้ว
+    const s=seatFor(seatType);
+    if(!s){ fadeOut(p); return; }                   // โซนนั้นเก้าอี้เต็ม
+    liveMove(p,{type:seatType,s});
+  }
+  /* รอบแรก/เปลี่ยนตัวกรอง: วางทุกคนลงที่ทันที ไม่เดินเข้ามาพร้อมกันทั้งโถง */
+  function placeWant(p){
+    const w=p.want;
+    let loc=null;
+    if((w.type==='desk'||w.type==='room')&&!w.u.patient) loc={type:w.type,u:w.u};
+    else { const t=w.type==='desk'?'seatT':w.type==='room'?'seatE':w.type; const s=seatFor(t); if(s) loc={type:t,s}; }
+    if(!loc){ fadeOut(p); return; }
+    claim(loc,p); p.loc=loc;
+    const I=locInfo(loc);
+    p.obj.position.copy(I.legs[0]); p.yaw=p.targetYaw=I.yaw; p.obj.rotation.y=p.yaw;
+    p.sit=p.sitTarget=1; settle(p); poseUpdate(p,0.016);
+  }
+
+  /* ---- สรุปตัวเลข / รายการคิว / ตัวกรอง ---- */
+  const minsSince=t=>Math.max(0,Math.floor((Date.now()-t)/60000));
+  function liveStats(){
+    const s={t:0,e:0,busy:0,red:0,lab:0};
+    for(const pt of L.points) for(const it of pt.items){
+      if(it.busy) s.busy++;
+      else if(isLab(it)) s.lab++;
+      else if(pt.kind==='T') s.t++; else s.e++;
+      if(!it.busy&&!isLab(it)&&minsSince(it.since)>=pref.r) s.red++;
+    }
+    L.stats=s;
+    $('sT').textContent=s.t; $('sE').textContent=s.e; $('sS').textContent=s.busy; $('sD').textContent=s.red;
+    $('sL').textContent=s.lab; $('statLab').hidden=!L.opt.labSep;
+    $('lD').textContent=`รอเกิน ${pref.r} นาที`;
+  }
+  function renderQueue(){
+    L.renderedAt=Date.now();
+    const d=new Date(); $('qTime').textContent=`ข้อมูล ${p2(d.getHours())}:${p2(d.getMinutes())} น.`;
+    if(!L.points.length){ $('qBody').innerHTML='<div class="qEmpty">ยังไม่มีคนไข้ที่จุดซักประวัติ / ห้องตรวจ ตามตัวกรองนี้</div>'; return; }
+    const MAXC=40;
+    $('qBody').innerHTML=L.points.map(pt=>{
+      const busy=pt.items.filter(it=>it.busy), lab=pt.items.filter(it=>!it.busy&&isLab(it));
+      const wait=pt.items.filter(it=>!it.busy&&!isLab(it));
+      const mins=wait.map(it=>minsSince(it.since)), mx=mins.length?Math.max(...mins):null;
+      const avg=mins.length?Math.round(mins.reduce((a,b)=>a+b,0)/mins.length):null;
+      const chip=(it,kind)=>{
+        const m=minsSince(it.since), lv=waitLevel(m), st=stName(it.os);
+        const tip=`HN ${it.hn}${it.slot&&it.slot.st?' · ช่องคิว '+it.slot.st:''}${it.slot?'':' · ไม่มีคิวใน opd_qs_slot'} · อยู่จุดนี้ ${fmtMin(m)}${st?' · สถานะ '+st:''}`;
+        if(kind==='busy') return `<span class="chip busy" title="${esc(tip)}">${esc(it.label)}<small>กำลังรับบริการ</small></span>`;
+        if(kind==='lab') return `<span class="chip lab" title="${esc(tip)}">${esc(it.label)}<small>รอผล ${m}′</small></span>`;
+        return `<span class="chip l${lv}${it.slot?'':' noslot'}" title="${esc(tip)}">${esc(it.label)}<small>${m}′</small></span>`;
+      };
+      const list=[...busy.map(it=>chip(it,'busy')),...wait.slice(0,MAXC).map(it=>chip(it,'wait')),
+        ...lab.slice(0,MAXC).map(it=>chip(it,'lab'))].join('');
+      const more=wait.length>MAXC?`<span class="chip" style="background:#7b8a96">+${wait.length-MAXC}</span>`:'';
+      const note=pt.unit?'':`<div class="qNote">ไม่แสดงในฉาก (เกิน ${MAX_UNITS} จุด) — เลือกจุดนี้ในตัวกรองเพื่อดูในฉาก</div>`;
+      const on=(pt.kind==='T'&&L.opt.tri===pt.cd)||(pt.kind==='E'&&L.opt.room===pt.cd);
+      const stN=L.staleBy.get(pt.cd)||0;                 // คนที่ค้างนานจนถือว่าไม่อยู่แล้ว (ตัดออกจากคิว)
+      return `<section class="qPt${on?' on':''}"><div class="qPtHead"><span class="qKind${pt.kind==='E'?' e':''}">${pt.kind==='E'?'ห้องตรวจ':'ซักประวัติ'}</span>
+        <button type="button" class="qPtName" data-pt="${esc(pt.cd)}" title="${esc(pt.name)} — คลิกเพื่อดูเฉพาะจุดนี้${on?' (คลิกซ้ำเพื่อดูทุกจุด)':''}">${esc(pt.name)}</button></div>
+        <div class="qMeta">รอ ${wait.length}${lab.length?` · รอผลตรวจ ${lab.length}`:''}${mx!=null?` · เฉลี่ย ${avg} · นานสุด ${fmtMin(mx)}`:''}${stN?` · ค้างเก่า ${stN} ไม่นับ`:''}</div>
+        <div class="chips">${list||'<span class="qMeta">ไม่มีคนไข้</span>'}${more}</div>${note}</section>`;
+    }).join('');
+  }
+  function setOptions(sel,opts,cur){
+    if(document.activeElement===sel) return;     // กำลังเลือกอยู่ ไม่วาดทับ
+    if(cur&&!opts.some(o=>o[0]===cur)) opts.push([cur,depLabel(cur)+' (ตอนนี้ไม่มีคนไข้)']);
+    const html=opts.map(([v,t])=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(t)}</option>`).join('');
+    if(sel.dataset.h!==html){ sel.innerHTML=html; sel.dataset.h=html; }
+    sel.value=cur;
+  }
+  function fillFilters(){
+    const O=L.opt, base=L.all.filter(it=>it.kind&&(!O.slotOnly||it.slot));
+    const count=(arr,key)=>{ const m=new Map(); for(const it of arr) m.set(it[key],(m.get(it[key])||0)+1); return m; };
+    const byName=(a,b)=>a[1].localeCompare(b[1],'th');
+    const cm=count(base,'md');
+    setOptions($('fClinic'),[['',`ทุกคลินิก (${base.length})`],...[...cm].filter(([k])=>k).map(([k,n])=>[k,`${depLabel(k)} (${n})`]).sort(byName)],O.clinic);
+    const inC=base.filter(it=>!O.clinic||it.md===O.clinic);
+    const pm=count(inC,'cd');
+    const pts=kind=>[...pm].filter(([k])=>kindOf(k)===kind).map(([k,n])=>[k,`${depLabel(k)} (${n})`]).sort(byName);
+    setOptions($('fTri'),[['','ทุกจุดซักประวัติ'],...pts('T')],O.tri);
+    setOptions($('fRoom'),[['','ทุกห้องตรวจ'],...pts('E')],O.room);
+    const nT=L.points.filter(p=>p.kind==='T').length, nE=L.points.filter(p=>p.kind==='E').length;
+    const over=[nT>MAX_UNITS?`จุดซักประวัติ ${nT}`:'',nE>MAX_UNITS?`ห้องตรวจ ${nE}`:''].filter(Boolean);
+    const notes=[];
+    if(over.length) notes.push(`ในฉากแสดงได้อย่างละ ${MAX_UNITS} จุด (มี ${over.join(' · ')}) — ใช้ตัวกรองเลือก ส่วนรายการด้านซ้ายแสดงครบ`);
+    if(L.staleN) notes.push(`ไม่นับคนที่ค้างเกิน ${L.opt.staleH} ชม. อีก ${L.staleN} คน (ปรับเวลาได้ในตั้งค่า)`);
+    $('note').textContent=notes.join(' · ');
+  }
+  function refilter(){ saveOpt(); L.first=true; liveSync(); }
+  $('fClinic').addEventListener('change',e=>{ L.opt.clinic=e.target.value; L.opt.tri=''; L.opt.room=''; refilter(); });
+  $('fTri').addEventListener('change',e=>{ L.opt.tri=e.target.value; refilter(); });
+  $('fRoom').addEventListener('change',e=>{ L.opt.room=e.target.value; refilter(); });
+  /* คลิกชื่อจุดในรายการ = ดูเฉพาะจุดนั้นในฉาก · คลิกซ้ำ = กลับไปดูทุกจุด */
+  $('qBody').addEventListener('click',e=>{
+    const b=e.target.closest('[data-pt]'); if(!b) return;
+    const cd=b.dataset.pt, pt=L.points.find(p=>p.cd===cd), k=pt?pt.kind:kindOf(cd), O=L.opt;
+    if(k==='T') O.tri=(O.tri===cd?'':cd);
+    else if(k==='E') O.room=(O.room===cd?'':cd);
+    else return;
+    refilter();
+  });
+
+  function renderLegend(){
+    $('legend').innerHTML=`<span><i style="background:${LV_BG[0]}"></i>รอน้อยกว่า ${pref.y} นาที</span>`+
+      `<span><i style="background:${LV_BG[1]}"></i>${pref.y}–${pref.r-1} นาที</span>`+
+      `<span><i style="background:${LV_BG[2]}"></i>${pref.r} นาทีขึ้นไป</span>`+
+      `<span><i style="background:${DONE_C}"></i>ตรวจเสร็จ/ออกจากจุด</span>`+
+      (L.mode==='live'&&L.opt&&L.opt.labSep?`<span><i style="background:#8294c9"></i>รอผลตรวจ (ไม่นับว่ารอหมอ)</span>`:'')+
+      (L.mode==='sim'?'<span style="flex-basis:100%">โหมดจำลอง: 1 วินาที = 1 นาที</span>':'');
+  }
+
+  /* ---- หน้าต่างตั้งค่า ---- */
+  function openSettings(){
+    $('thY').value=pref.y; $('thR').value=pref.r;
+    const live=L.mode==='live'; $('setLive').hidden=!live;
+    if(live){
+      const ev=$('every');
+      if(L.demo&&!ev.querySelector('option[value="5"]')) ev.insertAdjacentHTML('afterbegin','<option value="5">5 วินาที (ข้อมูลจำลอง)</option>');
+      ev.value=String(L.opt.every); ev.disabled=L.demo;
+      $('slotOnly').checked=!!L.opt.slotOnly;
+      $('stFilter').checked=!!L.opt.stFilter;
+      $('labSep').checked=!!L.opt.labSep;
+      $('staleH').value=L.opt.staleH;
+      $('stHelp').textContent=stSupportText();
+      /* แผนกที่มีคนไข้วันนี้ + แผนกที่ชื่อเข้ากฎ/ถูกตั้งไว้ */
+      const cnt=new Map(); for(const it of L.all) if(!it.an) cnt.set(it.cd,(cnt.get(it.cd)||0)+1);
+      const codes=new Set([...cnt.keys(),...Object.keys(L.opt.map)]);
+      for(const [c,n] of L.dep) if(guessKind(n)) codes.add(c);
+      codes.delete('');
+      const list=[...codes].sort((a,b)=>(cnt.get(b)||0)-(cnt.get(a)||0)||depLabel(a).localeCompare(depLabel(b),'th'));
+      const gl=k=>k==='T'?'จุดซักประวัติ':k==='E'?'ห้องตรวจ':'ไม่แสดง';
+      $('mapBody').innerHTML=list.map(c=>{
+        const m=L.opt.map[c]||'';
+        return `<tr><td>${esc(depLabel(c))} <small style="color:#7b8a96">${esc(c)}</small></td><td class="n">${cnt.get(c)||0} คน</td>
+          <td><select data-cd="${esc(c)}" aria-label="จุดบนจอของ ${esc(depLabel(c))}">
+          <option value=""${m===''?' selected':''}>อัตโนมัติ (${gl(guessKind(L.dep.get(c)))})</option>
+          <option value="T"${m==='T'?' selected':''}>จุดซักประวัติ</option>
+          <option value="E"${m==='E'?' selected':''}>ห้องตรวจ</option>
+          <option value="-"${m==='-'?' selected':''}>ไม่แสดง</option></select></td></tr>`;
+      }).join('')||'<tr><td>ยังไม่มีข้อมูลแผนก</td></tr>';
+    }
+    $('ovSet').hidden=false; setTimeout(()=>$('thY').focus(),50);
+  }
+  function applyThresholds(){
+    const y=Math.round(+$('thY').value), r=Math.round(+$('thR').value);
+    if(!(y>0&&r>y&&r<=1440)){ showToast('เกณฑ์ไม่ถูกต้อง: เหลืองต้องน้อยกว่าแดง'); return; }
+    pref.y=y; pref.r=r; lsSet(LS_PREF,JSON.stringify(pref));
+    renderLegend();
+    for(const p of patients) p.tagKey=null;
+    if(L.mode==='live'){ liveStats(); renderQueue(); }
+  }
+  $('thY').addEventListener('change',applyThresholds);
+  $('thR').addEventListener('change',applyThresholds);
+  $('every').addEventListener('change',e=>{ L.opt.every=+e.target.value; saveOpt(); L.nextAt=Math.min(L.nextAt,Date.now()+L.opt.every*1000); });
+  $('slotOnly').addEventListener('change',e=>{ L.opt.slotOnly=e.target.checked; refilter(); });
+  $('stFilter').addEventListener('change',e=>{ L.opt.stFilter=e.target.checked; L.nextAt=0; refilter(); $('stHelp').textContent=stSupportText(); });
+  $('labSep').addEventListener('change',e=>{ L.opt.labSep=e.target.checked; refilter(); });
+  $('staleH').addEventListener('change',e=>{
+    const v=Math.max(0,Math.min(48,Math.round((+e.target.value||0)*2)/2));
+    L.opt.staleH=v; e.target.value=v; refilter();
+  });
+  $('mapBody').addEventListener('change',e=>{
+    const cd=e.target.dataset&&e.target.dataset.cd; if(cd==null) return;
+    if(e.target.value) L.opt.map[cd]=e.target.value; else delete L.opt.map[cd];
+    refilter();
+  });
+  $('setClose').addEventListener('click',()=>{ $('ovSet').hidden=true; $('btnSet').focus(); });
+  $('btnSet').addEventListener('click',openSettings);
+
+  /* ---- หน้าต่างเชื่อมต่อ ---- */
+  $('btnConn').addEventListener('click',()=>{ $('sid').value=''; showConn('เชื่อมต่อ HOSxP','วาง BMS Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อแสดงคิวจริงของวันนี้',false); });
+  $('connGo').addEventListener('click',()=>{
+    const s=$('sid').value.trim();
+    if(!s){ $('connMsg').textContent='กรุณาวาง BMS Session ID ก่อน'; $('connMsg').className='err'; $('sid').focus(); return; }
+    $('ovConn').hidden=true; connect(s);
+  });
+  $('sid').addEventListener('keydown',e=>{ if(e.key==='Enter') $('connGo').click(); });
+  $('connDemo').addEventListener('click',()=>{ $('ovConn').hidden=true; startDemo(); });
+  $('connClose').addEventListener('click',()=>{ $('ovConn').hidden=true; });
+
+  /* ---- ข้อมูลจำลอง (?demo=1) — แถวหน้าตาเหมือนผล SQL จริงทุกคอลัมน์ ---- */
+  const DEMO_CL=[
+    {md:'M', name:'คลินิกอายุรกรรม', tri:'T1', rooms:['E1','E2'], pre:'A'},
+    {md:'S', name:'คลินิกศัลยกรรม', tri:'T2', rooms:['E3'], pre:'B'},
+    {md:'K', name:'คลินิกกุมารเวชกรรม', tri:'T3', rooms:['E4'], pre:'C'},
+    {md:'N', name:'คลินิกหู คอ จมูก', tri:'T2', rooms:['E5'], pre:'D'},
+    {md:'Y', name:'คลินิกจักษุ', tri:'T2', rooms:['E6'], pre:'E'},
+  ];
+  const DEMO_DEP=[['T1','จุดซักประวัติอายุรกรรม'],['T2','จุดซักประวัติศัลยกรรม'],['T3','จุดซักประวัติกุมารเวช'],
+    ['E1','ห้องตรวจอายุรกรรม 1'],['E2','ห้องตรวจอายุรกรรม 2'],['E3','ห้องตรวจศัลยกรรม'],['E4','ห้องตรวจกุมารเวช'],
+    ['E5','ห้องตรวจหู คอ จมูก'],['E6','ห้องตรวจจักษุ'],['F','การเงิน'],['P','ห้องจ่ายยา'],['LB','ห้องแล็บ'],['H','กลับบ้าน'],
+    ...DEMO_CL.map(c=>[c.md,c.name])];
+  const DEMO_OST=[['96','รอตรวจ'],['00','รอผลตรวจ'],['62','ตรวจรักษาที่แผนก'],['99','ตรวจแล้ว'],['98','รอรับยา']];
+  const DEMO_IST=[['01','มาเอง (ห้องบัตร)'],['02','มาตามนัดมา'],['04','รับต่อจากสถานพยาบาลอื่น'],['10','EMS']];
+  const demo={list:[],slots:new Map(),seq:0};
+  function demoAdd(c,cd,ago,busy){
+    const n=++demo.seq; c.n=(c.n||0)+1;
+    const t=Date.now()-ago*60000;
+    const r=Math.random();
+    const v={vn:'691125'+String(n).padStart(6,'0'), hn:String(400000+n*37), vt:fmtDT(t-rand(2,15)*60000), cd, cb:busy?'Y':'N', ct:fmtDT(t), md:c.md, an:'', q:String(n),
+      os:busy?'62':(r<0.14?'00':'96'), ist:r<0.04?'10':(r<0.09?'04':(r<0.5?'02':'01'))};
+    if(Math.random()<0.9) demo.slots.set(v.vn,{no:c.pre+String(c.n).padStart(3,'0'), st:hm(fmtDT(t-rand(0,30)*60000))});
+    demo.list.push(v); return v;
+  }
+  function startDemo(){
+    L.demo=true; L.conn=null; L.db='demo'; L.user={name:'ข้อมูลจำลอง'};
+    L.dq=new Map(); L.dqOk=false;                       // ข้อมูลจำลองไม่มี opd_dep_queue → ไม่กรองด้วยแผนกปิดงาน
+    L.ost=new Map(DEMO_OST); L.ist=new Map(DEMO_IST);
+    L.dep=new Map(DEMO_DEP); demo.list=[]; demo.slots=new Map(); demo.seq=0;
+    for(const c of DEMO_CL){
+      c.n=0;
+      const k=c.md==='M'?2:1;
+      for(let i=0;i<3*k;i++) demoAdd(c,c.tri,rand(2,75),false);
+      for(const r of c.rooms){ demoAdd(c,r,rand(3,20),true); for(let i=0;i<2+Math.floor(Math.random()*4);i++) demoAdd(c,r,rand(4,95),false); }
+    }
+    for(const c of DEMO_CL) if(c.tri!=='T2'||c.md==='S') demoAdd(c,c.tri,rand(1,8),true);
+    enterLive('โรงพยาบาลตัวอย่าง (ข้อมูลจำลอง)');
+  }
+  function demoTick(){
+    if(demo.list.length&&L.rows.length){            // รอบแรกยังไม่ขยับ ให้เห็นสภาพตั้งต้นก่อน
+      const now=fmtDT(Date.now()), at=cd=>demo.list.filter(v=>v.cd===cd);
+      const move=(v,cd)=>{ v.cd=cd; v.cb='N'; v.ct=now; };
+      const clinic=v=>DEMO_CL.find(c=>c.md===v.md);
+      const first=list=>list.filter(v=>v.cb!=='Y').sort((a,b)=>a.ct<b.ct?-1:1)[0];
+      for(const cd of ['T1','T2','T3']){
+        const here=at(cd), b=here.find(v=>v.cb==='Y');
+        if(b){ if(Math.random()<0.3) move(b,pick(clinic(b).rooms)); }
+        else { const f=first(here); if(f&&Math.random()<0.7) f.cb='Y'; }
+      }
+      for(const cd of ['E1','E2','E3','E4','E5','E6']){
+        const here=at(cd), b=here.find(v=>v.cb==='Y');
+        if(b){ if(Math.random()<0.22){ const x=Math.random(); move(b,x<0.35?'F':x<0.6?'P':x<0.75?'LB':'H'); } }
+        else { const f=first(here); if(f&&Math.random()<0.6) f.cb='Y'; }
+      }
+      for(const v of demo.list) if(['F','P','LB'].includes(v.cd)&&Math.random()<0.3) move(v,'H');
+      if(Math.random()<0.75){ const c=pick(DEMO_CL); demoAdd(c,c.tri,0,false); }
+      const done=demo.list.filter(v=>v.cd==='H');
+      if(done.length>60) demo.list=demo.list.filter(v=>v.cd!=='H'||done.indexOf(v)>=done.length-60);
+    }
+    L.rows=demo.list.map(v=>({...v})); L.slots=demo.slots;
+  }
+
+  /* ---- รอบเวลาของโหมดข้อมูลจริง ---- */
+  setInterval(()=>{
+    if(L.mode!=='live') return;
+    if(!L.busy&&Date.now()>=L.nextAt) load();
+    for(const p of patients) if(p.want&&!p.leaving&&!p.dead&&p.mode!=='walk') applyWant(p);   // โต๊ะ/ห้องว่างแล้ว → คนที่รออยู่เดินเข้า
+    if(Date.now()-L.renderedAt>30000){ liveStats(); renderQueue(); }
+  },1000);
+
+  /* ---------- Initial population ---------- */
+  addTraffic(window.innerWidth<820?5:9);
+  for(let i=0;i<5;i++) seedSeated(seatsT[i],'waitT',0);
+  for(let i=0;i<4;i++) seedSeated(seatsE[i],'waitE',-10+i);
+  refreshUI();
+  drawBoard(false);
+  rooms.forEach(r=>drawRoomDisp(r,false));
+
+  /* ---------- Loop ---------- */
+  const clock=new THREE.Clock();
+  let dispTimer=0, statTimer=0;
+  function popUpdate(u, rdt){
+    const goal=u.active?1:0;
+    if(u.k!==goal){
+      u.k = goal>u.k ? Math.min(1,u.k+rdt*2.2) : Math.max(0,u.k-rdt*2.8);
+      const s = u.active ? easeOutBack(u.k) : easeInOutCubic(u.k);
+      u.group.scale.setScalar(Math.max(0.0001,s));
+      u.group.visible = u.k>0.001;
+    }
+  }
+
+  renderer.setAnimationLoop(()=>{
+    const rdt=Math.min(clock.getDelta(),0.1);
+    realTime+=rdt;
+    const dt=playing?rdt*speed:0;
+
+    if(dt>0){
+      simTime+=dt; storyTime+=dt;
+      vehUpdate(dt);
+      dispatch();
+      for(const p of patients){
+        agentUpdate(p,dt);
+        if(p.state==='gone'){
+          p.fade-=dt*2.5;
+          p.obj.scale.setScalar(Math.max(0.001,p.fade));
+          if(p.fade<=0) removePatient(p);
+        }
+        if(p.state==='toRoom'){ const k=1+0.14*Math.sin(realTime*9); p.tag.scale.set(TAG_W*k,TAG_H*k,1); }
+        else if(p.tag.scale.x!==TAG_W) p.tag.scale.set(TAG_W,TAG_H,1);
+      }
+      for(let i=patients.length-1;i>=0;i--) if(patients[i].dead) patients.splice(i,1);
+      for(const d of desks) if(d.group.visible) staffAnim(d.staff, !!(d.patient && d.patient.state==='triage'), dt, simTime);
+      for(const r of rooms) if(r.group.visible) staffAnim(r.staff, !!(r.patient && r.patient.state==='exam'), dt, simTime);
+      for(const s of SVCS){
+        const a=s.staff;
+        if(s.busy){ a.gR=-0.9+0.15*Math.sin(simTime*4); a.gL=-0.2; a.nodT=0.08*Math.sin(simTime*2); }
+        else { a.gR=0; a.gL=0; a.nodT=0; }
+        agentUpdate(a,dt);
+      }
+    }
+    for(const d of desks) popUpdate(d,rdt);
+    for(const r of rooms) popUpdate(r,rdt);
+
+    dispTimer+=rdt;
+    if(dispTimer>0.25){
+      dispTimer=0;
+      const blinkOn=Math.floor(realTime*4)%2===0;
+      beaconUpdate(realTime);
+      drawBoard(blinkOn);
+      for(const r of rooms) if(r.group.visible) drawRoomDisp(r,blinkOn);
+    }
+    statTimer+=rdt;
+    if(statTimer>0.3){
+      statTimer=0;
+      for(const p of patients) if(!p.dead) retag(p);       // สีป้ายเปลี่ยนตามเวลารอที่เดินไป
+      if(L.mode==='sim'){
+        const c=counts();
+        $('sT').textContent=c.t; $('sE').textContent=c.e; $('sS').textContent=c.s; $('sD').textContent=servedCount;
+      }
+    }
+
+    // story & camera (ทัวร์อัตโนมัติเฉพาะโหมดจำลอง · โหมดข้อมูลจริงมองภาพรวมนิ่ง ๆ)
+    const tour=L.mode==='sim';
+    const u=(storyTime%CYCLE)/CYCLE;
+    if(tour){
+      const seg=u*5, k=Math.floor(seg)%5, f=seg-Math.floor(seg);
+      const e=easeInOutCubic(clamp((f-0.7)/0.3,0,1));
+      const A=ZONES[k], B=ZONES[(k+1)%5];
+      zonePos.lerpVectors(A.p,B.p,e);
+      const zr=lerp(A.r,B.r,e);
+      if(k!==lastK){ lastK=k; $('storyStep').textContent=`ขั้นตอนที่ ${k+1} / 5`; $('storyText').textContent=A.t; }
+      $('storyFill').style.width=(u*100).toFixed(1)+'%';
+      ring.position.set(zonePos.x,0.03,zonePos.z); ring.scale.setScalar(zr);
+      disc.position.set(zonePos.x,0.025,zonePos.z); disc.scale.setScalar(zr);
+      ringMat.opacity=0.35+0.2*Math.sin(realTime*3);
+    } else zonePos.set(window.innerWidth>820?-15:0,0,2.5);   // เลื่อนฉากให้พ้นรายการคิวด้านซ้าย + เห็นลานรับส่งหน้าอาคาร
+    ring.visible=disc.visible=tour;
+
+    if(resetting){
+      const kk=Math.min(1,rdt*4);
+      view.theta+= (DEF.theta-view.theta)*kk;
+      view.phi+= (DEF.phi-view.phi)*kk;
+      view.radius+= (DEF.radius-view.radius)*kk;
+      if(Math.abs(view.theta-DEF.theta)<0.002 && Math.abs(view.phi-DEF.phi)<0.002 && Math.abs(view.radius-DEF.radius)<0.05) resetting=false;
+    }
+    desiredTarget.lerpVectors(baseTarget,zonePos,0.36);
+    camTarget.lerp(desiredTarget,Math.min(1,rdt*2));
+    const sway=tour?1:0.35;
+    const th=view.theta+0.3*sway*Math.sin(TAU*u);
+    const ph=clamp(view.phi+0.05*sway*Math.sin(2*TAU*u),0.2,1.38);
+    const aspect=camera.aspect;
+    const rad=view.radius*(aspect<1?Math.min(1.9,1/Math.pow(aspect,0.75)):1);
+    camera.position.set(
+      camTarget.x+rad*Math.sin(ph)*Math.sin(th),
+      camTarget.y+rad*Math.cos(ph),
+      camTarget.z+rad*Math.sin(ph)*Math.cos(th)
+    );
+    camera.lookAt(camTarget);
+
+    renderer.render(scene,camera);
+  });
+
+  /* ---------- เริ่มต้น: session จาก URL → ที่จำไว้ (ของแอปนี้ / ของหน้า home) → ถามผู้ใช้ ---------- */
+  renderLegend();
+  {
+    const qs=new URLSearchParams(location.search);
+    L.mkt=qs.get('marketplace-token')||qs.get('marketplace_token')||'';
+    const urlSid=qs.get(SID_PARAM)||qs.get('bms_session_id')||'';
+    if(urlSid){   // ไม่ให้ session ค้างอยู่ในแถบที่อยู่/ประวัติการเปิด
+      qs.delete(SID_PARAM); qs.delete('bms_session_id');
+      history.replaceState(null,'',location.pathname+(qs.toString()?'?'+qs:''));
+    }
+    if(qs.get('demo')==='1') startDemo();
+    else{
+      const sid=urlSid||lsGet(LS_SID)||lsGet(LS_HOME_SID);
+      if(sid) connect(sid);
+      else showConn('เชื่อมต่อ HOSxP','วาง BMS Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อแสดงคิวจริงของวันนี้ — หรือกดปิดเพื่อดูแอนิเมชันจำลอง',false);
+    }
+  }
+}
+</script>
+<script>
+/* ลิงก์กลับหน้ารวมแอปแสดงผล 3 มิติ — หน้านี้ถูกเสิร์ฟจากเซิร์ฟเวอร์ตัวเดียวกับหน้ารวม
+   (start.bat ของ BMS-3D-Home) หน้ารวมจึงอยู่ที่ /index.html ของพอร์ตเดียวกันเสมอ
+   แม้จะเปลี่ยน PORT ใน start.bat · โผล่เฉพาะตอนที่หน้ารวมมีอยู่จริง จะได้ไม่มีลิงก์ตายค้างบนจอ */
+(function(){
+  var a=document.getElementById('homeLnk'), row=document.getElementById('homeRow');
+  if(!a) return;
+  var url=location.protocol==='file:'?'http://localhost:8805/index.html':location.origin+'/index.html';
+  if(url===location.origin+location.pathname) return;   // เปิดแยกเดี่ยว ๆ ที่รากพอร์ต: ไม่มีหน้ารวมให้กลับไป
+  a.href=url;
+  var done=function(){ a.hidden=false; if(row) row.hidden=false; };
+  try{
+    var c=new AbortController(), t=setTimeout(function(){ c.abort(); },2500);
+    fetch(url,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:c.signal})
+      .then(function(r){ if(!r||r.type==='opaque'||r.status<400) done(); })
+      .catch(function(){}).then(function(){ clearTimeout(t); });
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

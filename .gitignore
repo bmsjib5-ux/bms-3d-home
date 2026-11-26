@@ -1,0 +1,8 @@
+# เครื่องมือ/ขยะของเครื่อง
+.claude/
+.vscode/
+__pycache__/
+*.zip
+*.rar
+Thumbs.db
+desktop.ini
