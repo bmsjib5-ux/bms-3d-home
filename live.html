@@ -888,6 +888,89 @@ function mergeStatic(root){
   return {meshes:drop.length,merged:made};
 }
 const MERGED=mergeStatic(world);
+
+/* ================================================================ รถวิ่งบนถนนหน้าโรงพยาบาล
+   ใช้ถนนเส้นเดิม (z = 26*S+3.1 กว้าง 6.2 ม.) · ไทยชิดซ้าย: วิ่งไป +x อยู่เลนฝั่งอาคาร (z น้อยกว่า)
+   สร้างหลัง mergeStatic และตั้ง userData.dyn ไว้ จะได้ไม่ถูกรวมเป็นก้อนเดียวกับฉากที่อยู่นิ่ง
+   รถไม่ทอดเงา เพราะ shadow map ของฉากนี้วาดครั้งเดียวแล้วค้างไว้ (เงาจะติดค้างกลางถนน) */
+const ROAD_Z=26*S+3.1, ROAD_HALF=112*S, LANE_OFF=1.55;
+const CAR_PAINT=['#e4e7ea','#39434f','#b4404c','#2f6f97','#d79b3a','#3c8f6d','#7f8893'].map(c=>mat(c,{roughness:.45,metalness:.2}));
+const TYRE_M=mat('#1a1e22',{roughness:.95}), CAR_GLASS=mat('#2b3b47',{roughness:.25,metalness:.3}),
+      LAMP_M=mat('#fff3d0',{roughness:.3}), TAIL_M=mat('#c9404c',{roughness:.4}), CAR_DARK=mat('#2a3139',{roughness:.6});
+const traffic=[];
+function tBox(g,w,h,d,m,x,y,z){ const o=new THREE.Mesh(BOX,m); o.scale.set(w,h,d); o.position.set(x,y+h/2,z); o.castShadow=false; o.receiveShadow=false; g.add(o); return o; }
+function tWheel(g,r,x,z,ws){ const o=new THREE.Mesh(CYL,TYRE_M); o.scale.set(r*2,0.2,r*2); o.rotation.z=Math.PI/2; o.position.set(x,r,z); o.castShadow=false; g.add(o); ws.push(o); return o; }
+/* รถหันหน้าไปทาง +z เหมือนคนในฉาก แล้วค่อยหมุนตามทิศที่วิ่ง */
+function buildCar(kind){
+  const g=new THREE.Group(); g.userData.dyn=true;
+  const paint=CAR_PAINT[Math.floor(Math.random()*CAR_PAINT.length)], ws=[];
+  let len=4.4;
+  if(kind==='bike'){
+    len=2.0;
+    tWheel(g,0.3,0,0.62,ws); tWheel(g,0.3,0,-0.62,ws);
+    tBox(g,0.3,0.3,1.5,paint,0,0.47,0); tBox(g,0.36,0.12,0.6,CAR_DARK,0,0.78,-0.2);
+    tBox(g,0.5,0.07,0.07,CAR_DARK,0,0.97,0.5);
+    tBox(g,0.36,0.5,0.24,paint,0,0.9,-0.1);                       // คนขับ
+    const h=new THREE.Mesh(SPH,CAR_DARK); h.scale.setScalar(0.3); h.position.set(0,1.55,-0.06); h.castShadow=false; g.add(h);
+  } else if(kind==='pickup'){
+    len=5.0;
+    tWheel(g,0.37,-0.84,1.6,ws); tWheel(g,0.37,0.84,1.6,ws); tWheel(g,0.37,-0.84,-1.6,ws); tWheel(g,0.37,0.84,-1.6,ws);
+    tBox(g,1.84,0.52,4.8,paint,0,0.36,0);
+    tBox(g,1.7,0.66,1.9,paint,0,0.88,1.1);
+    tBox(g,1.74,0.5,0.12,CAR_GLASS,0,1.0,2.02);
+    tBox(g,1.8,0.44,0.12,paint,0,0.86,-2.3);
+    tBox(g,0.12,0.44,2.4,paint,-0.86,0.86,-1.1); tBox(g,0.12,0.44,2.4,paint,0.86,0.86,-1.1);
+    tBox(g,0.3,0.16,0.1,LAMP_M,-0.66,0.64,2.42); tBox(g,0.3,0.16,0.1,LAMP_M,0.66,0.64,2.42);
+    tBox(g,0.3,0.16,0.1,TAIL_M,-0.66,0.72,-2.36); tBox(g,0.3,0.16,0.1,TAIL_M,0.66,0.72,-2.36);
+  } else if(kind==='van'){
+    len=5.2;
+    tWheel(g,0.35,-0.84,1.6,ws); tWheel(g,0.35,0.84,1.6,ws); tWheel(g,0.35,-0.84,-1.6,ws); tWheel(g,0.35,0.84,-1.6,ws);
+    tBox(g,1.94,1.44,5.0,paint,0,0.48,0);
+    tBox(g,1.84,0.54,0.14,CAR_GLASS,0,1.35,2.46);
+    tBox(g,0.12,0.46,3.0,CAR_GLASS,-0.92,1.35,0.3); tBox(g,0.12,0.46,3.0,CAR_GLASS,0.92,1.35,0.3);
+    tBox(g,0.3,0.16,0.1,LAMP_M,-0.66,0.64,2.52); tBox(g,0.3,0.16,0.1,LAMP_M,0.66,0.64,2.52);
+  } else {
+    tWheel(g,0.33,-0.8,1.42,ws); tWheel(g,0.33,0.8,1.42,ws); tWheel(g,0.33,-0.8,-1.42,ws); tWheel(g,0.33,0.8,-1.42,ws);
+    tBox(g,1.78,0.58,4.3,paint,0,0.33,0);
+    tBox(g,1.6,0.56,2.1,paint,0,0.88,-0.2);
+    tBox(g,1.66,0.4,2.0,CAR_GLASS,0,0.98,-0.18);
+    tBox(g,0.3,0.15,0.1,LAMP_M,-0.6,0.62,2.18); tBox(g,0.3,0.15,0.1,LAMP_M,0.6,0.62,2.18);
+    tBox(g,0.3,0.15,0.1,TAIL_M,-0.6,0.66,-2.12); tBox(g,0.3,0.15,0.1,TAIL_M,0.6,0.66,-2.12);
+  }
+  world.add(g);
+  return {obj:g,kind,len,wheels:ws,spin:0,dir:1,x:0,v:0,vMax:0};
+}
+{
+  const kinds=['sedan','pickup','sedan','van','bike','sedan','bike','pickup','sedan','van'];
+  const n=innerWidth<820?6:10;
+  for(let i=0;i<n;i++){
+    const c=buildCar(kinds[i%kinds.length]);
+    c.dir=i%2?1:-1;
+    c.x=-ROAD_HALF+(2*ROAD_HALF)*(i/n)+Math.random()*10;
+    c.vMax=c.kind==='bike'?10+Math.random()*3:7+Math.random()*4.5; c.v=c.vMax;
+    c.obj.rotation.y=c.dir>0?Math.PI/2:-Math.PI/2;
+    c.obj.position.set(c.x,0,ROAD_Z-c.dir*LANE_OFF);
+    traffic.push(c);
+  }
+}
+/* เว้นระยะคันหน้าแบบง่าย ๆ รถจะได้ไม่ซ้อนกัน แล้ววนกลับมาอีกฝั่งเมื่อสุดถนน */
+function trafficStep(dt){
+  if(dt<=0) return;
+  for(const dir of [1,-1]){
+    const list=traffic.filter(c=>c.dir===dir).sort((a,b)=>dir>0?a.x-b.x:b.x-a.x);
+    for(let i=0;i<list.length;i++){
+      const c=list[i], ahead=list[i+1];
+      const gap=ahead?Math.abs(ahead.x-c.x)-(ahead.len+c.len)/2:999;
+      const want=gap<7?c.vMax*Math.max(0,Math.min(1,(gap-1.5)/5.5)):c.vMax;
+      c.v+=Math.max(-14*dt,Math.min(4*dt,want-c.v));
+      c.x+=c.v*dt*dir;
+      if(c.x>ROAD_HALF) c.x=-ROAD_HALF; else if(c.x<-ROAD_HALF) c.x=ROAD_HALF;
+      c.spin+=c.v*dt/0.34;
+      c.obj.position.x=c.x;
+      for(const w of c.wheels) w.rotation.x=c.spin;
+    }
+  }
+}
 /* ---- station markers + labels ---- */
 const LBL=Math.pow(S,0.75);                                              // ป้ายจุดโตตามขนาดอาคาร อ่านได้จากมุมไกล
 const ringG=new THREE.TorusGeometry(1.05,0.07,8,48); ringG.rotateX(Math.PI/2);
@@ -2545,14 +2628,14 @@ function frame(now){
   lastDraw=now;
   const _p0=PERF?performance.now():0;
   const dt=Math.min(clock.getDelta(),moving?0.05:0.2); realTime+=dt;
-  rpFrame(dt); updateAvatars(dt); updateStations(); updateCamera(dt);
+  rpFrame(dt); updateAvatars(dt); trafficStep(dt); updateStations(); updateCamera(dt);
   statT+=dt; if(statT>5){ statT=0; if(state.loadedAt){ stats(); renderList(); if(sel||focusSt) renderInfo(); } }
   secT+=dt; if(secT>1){ secT=0; tick(); }
   moving=!!state.placing||pointers.size>0||realTime-lastInteract<1.5||
     Math.abs(goal.radius-view.radius)>0.05||Math.abs(goal.phi-view.phi)>0.002||target.distanceTo(_desired)>0.02||
     avs.some(a=>a.path||a.amp>0.01||Math.abs(a.sc-(a.leaving?0:1))>0.01)||!!(state.rp&&state.rp.playing);
   const spin=!!tour||(!reduceMotion&&!sel&&!focusSt&&!state.placing&&realTime-lastInteract>6);
-  fps=moving?30:spin?15:8;
+  fps=moving?30:(spin||traffic.length)?15:8;     // มีรถวิ่งอยู่ ฉากจึงไม่ลงไปถึง 8 fps (รถจะกระตุก)
   renderer.render(scene,camera);
   if(PERF){ PERF.frames++; PERF.js+=performance.now()-_p0; }
 }
