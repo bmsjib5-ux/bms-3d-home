@@ -1,0 +1,2064 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ระบบห้องเจาะเลือด 3 มิติ</title>
+<style>
+:root{
+  --blue:#2f7fe0; --orange:#f08a24; --teal:#1aa39a; --ink:#163047;
+  --panel:rgba(255,255,255,.86);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:#dfeaf1;color:var(--ink);
+  font-family:"Sukhumvit Set","Leelawadee UI","Noto Sans Thai","Thonburi",Tahoma,system-ui,sans-serif;}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#c.drag{cursor:grabbing}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:2}
+.card{pointer-events:auto;position:absolute;background:var(--panel);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  border-radius:14px;box-shadow:0 8px 28px rgba(20,50,80,.18);
+  padding:12px 14px;border:1px solid rgba(255,255,255,.75)}
+#mainCard{top:12px;left:12px;width:min(372px,calc(100vw - 24px))}
+#statusCard{top:12px;right:12px;width:310px}
+h1{font-size:20px;margin:0 0 3px;color:#123a5e;line-height:1.25}
+h2{font-size:15px;margin:0 0 6px;color:#123a5e}
+h3{font-size:13px;margin:10px 0 4px;color:#123a5e}
+.hint{margin:0 0 6px;font-size:12.5px;color:#4a6378;line-height:1.45}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}
+.btn{font:inherit;font-size:13.5px;border:0;border-radius:9px;padding:7px 11px;cursor:pointer;
+  background:#e4edf4;color:#173a57;transition:filter .15s, transform .1s}
+.btn:hover{filter:brightness(.95)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:3px solid #9cc7f5;outline-offset:1px}
+.primary{background:#173a57;color:#fff;min-width:132px}
+.gen{background:var(--blue);color:#fff}
+.pri{background:var(--orange);color:#fff}
+.speed{font-size:13.5px;width:100%}
+.speed input{flex:1;accent-color:var(--blue);min-width:90px}
+.speed output{min-width:46px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-direction:column;gap:3px;font-size:12.5px;margin-top:9px;color:#2d475d}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.dot.b{background:var(--blue)} .dot.o{background:var(--orange)} .dot.t{background:var(--teal)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td{padding:5px 3px;border-bottom:1px solid rgba(0,0,0,.07);vertical-align:middle}
+td small{display:block;font-size:11px;color:#6a8296}
+.q{font-weight:800;font-size:15.5px;text-align:center;font-variant-numeric:tabular-nums;width:62px}
+.q.a{color:var(--blue)} .q.p{color:#d0700f} .q.dim{color:#9aabb9}
+.st{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;white-space:nowrap}
+.st.idle{background:#dff3e6;color:#1d7a43}
+.st.call{background:#fff0d2;color:#a35b00;animation:blink 1s infinite}
+.st.busy{background:#fde2e4;color:#b2232f}
+.st.done{background:#e3eef9;color:#245d97}
+@keyframes blink{50%{opacity:.45}}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px;font-size:12px}
+.stats div{background:rgba(23,58,87,.06);border-radius:8px;padding:5px 7px}
+.stats b{font-size:16px;display:block;font-variant-numeric:tabular-nums}
+#log{margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;max-height:140px;overflow:hidden}
+#log b.a{color:var(--blue)} #log b.p{color:#d0700f}
+#log span{color:#7890a3;font-size:11px;margin-left:4px}
+#steps{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:2;display:flex;gap:6px;
+  pointer-events:none;flex-wrap:nowrap}
+#steps span{background:rgba(255,255,255,.88);border-radius:999px;padding:6px 12px;font-size:13px;
+  box-shadow:0 4px 14px rgba(20,50,80,.14);white-space:nowrap}
+#steps b{display:inline-block;min-width:20px;margin-left:4px;padding:0 6px;border-radius:9px;
+  background:#173a57;color:#fff;text-align:center;font-variant-numeric:tabular-nums}
+#caption{position:fixed;left:50%;bottom:62px;transform:translate(-50%,12px);opacity:0;z-index:3;
+  transition:opacity .35s, transform .35s;background:#173a57;color:#fff;padding:10px 20px;border-radius:12px;
+  font-size:18px;font-weight:600;pointer-events:none;box-shadow:0 8px 24px rgba(10,30,50,.3);white-space:nowrap}
+#caption.show{opacity:1;transform:translate(-50%,0)}
+#caption.pri{background:#c76a0e}
+#prompt{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;font:inherit;font-size:21px;
+  padding:16px 30px;border-radius:16px;background:#173a57;color:#fff;border:0;cursor:pointer;
+  box-shadow:0 12px 40px rgba(10,30,50,.35)}
+#prompt small{display:block;font-size:13px;opacity:.8;margin-top:4px}
+#toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-20px);opacity:0;z-index:5;
+  background:rgba(23,58,87,.94);color:#fff;padding:8px 16px;border-radius:10px;font-size:14px;
+  transition:.3s;pointer-events:none}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#nogl{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(#eaf3f8,#d5e4ee);z-index:10;padding:24px}
+#nogl div{max-width:520px;background:#fff;border-radius:18px;padding:26px 28px;text-align:center;
+  box-shadow:0 10px 40px rgba(20,50,80,.18);line-height:1.6}
+#nogl h2{font-size:22px;margin:0 0 8px}
+/* ---- เชื่อมต่อ HOSxP: ป้ายสถานะ / หน้าต่างใส่ session / แผงตั้งค่า ---- */
+.pill{display:inline-flex;align-items:center;gap:6px;background:#eef4f9;border:1px solid #d3e0ea;
+  border-radius:999px;padding:4px 10px;font-size:12.5px;max-width:100%}
+.pill .pdot{width:9px;height:9px;border-radius:50%;background:#9aabb9;flex:0 0 auto}
+.pill.ok .pdot{background:#1d7a43} .pill.warn .pdot{background:#d08a0d;animation:blink 1s infinite}
+.pill.err .pdot{background:#c0262d} .pill.demo .pdot{background:#7b4fc9}
+.pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#srcLine{margin:6px 0 0;font-size:11.5px;color:#6a8296}
+.modal{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  background:rgba(14,38,60,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);padding:18px}
+.modal .box{background:#fff;border-radius:16px;padding:20px 22px;width:min(460px,100%);
+  box-shadow:0 18px 50px rgba(10,30,50,.35);max-height:calc(100vh - 36px);overflow:auto}
+.modal h2{margin:0 0 6px;font-size:19px}
+.modal p{margin:0 0 10px;font-size:13px;color:#4a6378;line-height:1.5}
+.modal input[type=text]{font:inherit;font-size:14px;width:100%;padding:9px 11px;border-radius:9px;
+  border:1px solid #c6d6e2;background:#f8fbfd}
+.modal .err{color:#b2232f}
+.fld{display:block;margin:10px 0;font-size:13px;color:#2d475d}
+.fld select,.fld input[type=number]{font:inherit;font-size:13.5px;margin-left:6px;padding:5px 8px;
+  border-radius:8px;border:1px solid #c6d6e2;background:#f8fbfd}
+.fld.chk{display:flex;gap:7px;align-items:flex-start;line-height:1.45}
+.fld.chk input{margin:2px 0 0;accent-color:var(--blue)}
+#mapList{margin:4px 0 0;padding:0;list-style:none}
+#mapList li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
+@media (max-width:900px){
+  #statusCard{width:250px;padding:9px 10px}
+  #log,#statusCard h3{display:none}
+}
+@media (max-width:720px){
+  #mainCard{padding:9px 11px}
+  h1{font-size:17px}
+  .legend{display:none}
+  #statusCard{top:auto;bottom:56px;right:8px;width:220px;font-size:12px}
+  .stats{display:none}
+  #steps span{font-size:11px;padding:4px 8px}
+  #caption{font-size:15px;bottom:auto;top:46%}
+}
+@media (max-width:520px){
+  #steps{display:none}
+  #statusCard{bottom:8px}
+  .hint{font-size:11.5px}
+}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="-1" aria-label="ฉากจำลองห้องเจาะเลือด 3 มิติ"></canvas>
+
+<div id="hud">
+  <div class="card" id="mainCard">
+    <h1>ระบบห้องเจาะเลือด 3 มิติ</h1>
+    <p class="hint">ลากเพื่อหมุนมุมมอง • ล้อเมาส์/จีบนิ้วเพื่อซูม • ดับเบิลคลิกเพื่อรีเซ็ต • Space เล่น/หยุด</p>
+    <div class="row">
+      <span class="pill" id="statusPill"><i class="pdot"></i><span id="statusText">โหมดจำลอง</span></span>
+      <button id="btnConn" class="btn">เชื่อมต่อ HOSxP</button>
+      <button id="btnRefresh" class="btn" hidden title="ดึงคิวเจาะเลือดใหม่ทันที">↻</button>
+    </div>
+    <div class="row">
+      <button id="play" class="btn primary">⏸ หยุดชั่วคราว</button>
+      <button id="reset" class="btn">⟲ รีเซ็ตมุมมอง</button>
+    </div>
+    <label class="row speed">ความเร็ว
+      <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="ความเร็วแอนิเมชัน">
+      <output id="speedOut">1×</output>
+    </label>
+    <div class="row" id="addRow">
+      <button id="addGen" class="btn gen">+ คนไข้ทั่วไป</button>
+      <button id="addWheel" class="btn pri">+ รถนั่ง</button>
+      <button id="addStretch" class="btn pri">+ รถนอน</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot b"></i>คนไข้ทั่วไป • บัตรคิว A • โต๊ะ 2–5</span>
+      <span><i class="dot o"></i>คนไข้รถนั่ง/รถนอน • บัตรคิว B • โต๊ะ 1</span>
+      <span><i class="dot t"></i>เส้นทางไปรอหน้าห้องตรวจ</span>
+    </div>
+    <div class="row" id="homeRow" hidden>
+      <a id="homeLnk" class="btn" href="#" style="display:inline-block;text-decoration:none" title="ไปหน้ารวมแอปแสดงผล 3 มิติ">☰ หน้ารวมแอปแสดงผล 3 มิติ</a>
+    </div>
+  </div>
+
+  <div class="card" id="statusCard">
+    <h2>สถานะโต๊ะเจาะเลือด (เรียลไทม์)</h2>
+    <table><tbody id="tbl"></tbody></table>
+    <div class="stats">
+      <div><span id="lGen">รอคิว ทั่วไป</span><b id="sGen">0</b></div>
+      <div><span id="lPri">รอคิว รถนั่ง/นอน</span><b id="sPri">0</b></div>
+      <div><span id="lDone">เจาะเลือดเสร็จ</span><b id="sDone">0</b></div>
+      <div><span id="lExam">เข้าห้องตรวจแล้ว</span><b id="sExam">0</b></div>
+    </div>
+    <h3 id="logHead">ประกาศเรียกคิวล่าสุด</h3>
+    <ol id="log"></ol>
+    <p class="hint" id="srcLine" hidden></p>
+  </div>
+</div>
+
+<div class="modal" id="overlay" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+    <h2 id="ovTitle">เชื่อมต่อ HOSxP</h2>
+    <p id="ovMsg">วาง Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อดึงคิวเจาะเลือดและการรับ Lab ของวันนี้มาแสดงในฉาก 3 มิติ</p>
+    <form id="ovForm" autocomplete="off">
+      <input id="ovSid" type="text" inputmode="text" placeholder="Session ID" aria-label="Session ID">
+      <div class="row">
+        <button class="btn primary" type="submit">เชื่อมต่อ</button>
+        <button class="btn" type="button" id="ovDemo">ใช้โหมดจำลอง</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="sheet" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <h2 id="shTitle">ตั้งค่าการเชื่อมต่อ</h2>
+    <p id="shInfo"></p>
+    <label class="fld">ดึงข้อมูลใหม่ทุก
+      <select id="optSec">
+        <option value="15">15 วินาที</option>
+        <option value="30">30 วินาที</option>
+        <option value="60">1 นาที</option>
+        <option value="120">2 นาที</option>
+      </select>
+    </label>
+    <label class="fld chk"><input id="optLab" type="checkbox">
+      <span>ถือว่า “เจาะแล้ว” เมื่อห้องแล็บรับ Lab ของ visit นั้น (lab_head.lab_receive = Y)<br>
+      <small style="color:#6a8296">ตาราง lab_blood_queue ของ HOSxP มักไม่บันทึกสถานะเจาะ/เรียกคิว การรับ Lab จึงเป็นสัญญาณที่เชื่อถือได้กว่า</small></span>
+    </label>
+    <div class="fld">ประเภทคิว → ตัวละครในฉาก
+      <ul id="mapList"></ul>
+    </div>
+    <div class="row">
+      <button class="btn primary" type="button" id="shSave">บันทึก</button>
+      <button class="btn" type="button" id="shClose">ปิด</button>
+      <button class="btn" type="button" id="shOff">ตัดการเชื่อมต่อ</button>
+    </div>
+  </div>
+</div>
+
+<div id="steps">
+  <span>① ออกบัตรคิว<b id="c1">0</b></span>
+  <span>② นั่งรอ<b id="c2">0</b></span>
+  <span>③ เจาะเลือด<b id="c3">0</b></span>
+  <span>④ รอหน้าห้องตรวจ<b id="c4">0</b></span>
+</div>
+<div id="caption" role="status" aria-live="polite"></div>
+<button id="prompt" hidden>▶ กดเพื่อเล่นแอนิเมชัน<small>ระบบตรวจพบการตั้งค่าลดการเคลื่อนไหว จึงหยุดไว้ก่อน</small></button>
+<div id="toast"></div>
+<div id="nogl" hidden>
+  <div>
+    <h2>ขออภัย ไม่สามารถแสดงฉาก 3 มิติได้</h2>
+    <p>เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับ WebGL<br>ลองเปิดด้วย Chrome, Edge, Firefox หรือ Safari รุ่นล่าสุด และเปิดการเร่งความเร็วด้วยฮาร์ดแวร์ (Hardware acceleration)</p>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "./lib/three.module.js";
+
+const $ = (id) => document.getElementById(id);
+
+function showNoGL() {
+  $('nogl').hidden = false;
+  $('hud').hidden = true;
+  $('steps').hidden = true;
+  $('prompt').hidden = true;
+  $('overlay').hidden = true;
+  $('sheet').hidden = true;
+  $('c').style.display = 'none';
+}
+function hasWebGL() {
+  try {
+    const c = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
+  } catch (e) { return false; }
+}
+
+if (!hasWebGL()) showNoGL();
+else {
+  try { main(); } catch (err) { console.error(err); showNoGL(); }
+}
+
+function main() {
+  /* ---------------- helpers ---------------- */
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const easeOutBack = (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  function angLerp(a, b, t) {
+    let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    return a + d * t;
+  }
+  const FONT = '"Sukhumvit Set","Leelawadee UI","Noto Sans Thai","Thonburi",Tahoma,sans-serif';
+
+  /* ---------------- renderer / scene ---------------- */
+  const canvas = $('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xdfeaf1);
+  scene.fog = new THREE.Fog(0xe2ecf2, 55, 120);
+
+  const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 300);
+
+  /* ---------------- textures ---------------- */
+  const loader = new THREE.TextureLoader();
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  function loadTex(url, tile, onLoad) {
+    const t = loader.load(url, onLoad, undefined, () => console.warn('โหลดภาพไม่สำเร็จ:', url));
+    t.colorSpace = THREE.SRGBColorSpace;
+    if (tile) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    t.anisotropy = maxAniso;
+    return t;
+  }
+  const floorTex = loadTex('assets/hospital-floor-tile.png', true);
+  const wallTex = loadTex('assets/hospital-wall-panel.png', true);
+  const backTex = loadTex('assets/hospital-backdrop.png', false, (t) => { scene.background = t; });
+
+  function scaleUV(geo, sx, sy) {
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * sx, uv.getY(i) * sy);
+    uv.needsUpdate = true;
+    return geo;
+  }
+  function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function canvasTex(c) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso; return t; }
+  function rr(g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function signTexture(text, sub, bg, w = 512, h = 128) {
+    const c = makeCanvas(w, h), g = c.getContext('2d');
+    rr(g, 4, 4, w - 8, h - 8, 22); g.fillStyle = bg; g.fill();
+    g.lineWidth = 6; g.strokeStyle = 'rgba(255,255,255,.95)'; g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if (sub) {
+      g.font = `bold ${Math.round(h * 0.34)}px ${FONT}`; g.fillText(text, w / 2, h * 0.38, w - 30);
+      g.font = `${Math.round(h * 0.21)}px ${FONT}`; g.fillText(sub, w / 2, h * 0.74, w - 30);
+    } else {
+      g.font = `bold ${Math.round(h * 0.42)}px ${FONT}`; g.fillText(text, w / 2, h * 0.53, w - 30);
+    }
+    return canvasTex(c);
+  }
+  function signMesh(tex, w, h) {
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
+  }
+
+  /* ---------------- materials ---------------- */
+  const std = (color, r = 0.6, m = 0) => new THREE.MeshStandardMaterial({ color, roughness: r, metalness: m });
+  const M = {
+    white: std(0xf3f6f8, 0.45), offwhite: std(0xe2e9ee, 0.6), steel: std(0xaab6bf, 0.35, 0.7),
+    dark: std(0x2a3642, 0.5), blue: std(0x2f7fe0, 0.45), navy: std(0x1d4f8f, 0.55),
+    orange: std(0xf08a24, 0.5), orangeSoft: std(0xf6a85a, 0.75), teal: std(0x1aa39a, 0.5),
+    green: std(0x3aa37a, 0.7), greenDark: std(0x2a6e55, 0.7), scrub: std(0x5bb6c9, 0.75),
+    scrubDark: std(0x3d8ea3, 0.75), mask: std(0xcfeaf6, 0.8), gown: std(0xcfe0ea, 0.8),
+    plant: new THREE.MeshStandardMaterial({ color: 0x4f9a52, roughness: 0.85, flatShading: true }),
+    pot: std(0xe9e2d6, 0.7), yellow: std(0xf2c230, 0.5), red: std(0xc0262d, 0.3), rubber: std(0x22272c, 0.85),
+    shoe: std(0x2b2b2b, 0.7), mattress: std(0xe9f1f6, 0.8), wood: std(0xc49a6c, 0.7), purple: std(0x7b4fc9, 0.4),
+    glass: new THREE.MeshStandardMaterial({ color: 0xbfe2f0, transparent: true, opacity: 0.3, roughness: 0.08, metalness: 0.1, depthWrite: false }),
+    doorDark: new THREE.MeshBasicMaterial({ color: 0x2b3946 }),
+    screen: new THREE.MeshStandardMaterial({ color: 0x0b2540, emissive: 0x3d9cff, emissiveIntensity: 0.7, roughness: 0.3 }),
+  };
+  const skins = [0xf1c9a5, 0xe0ac82, 0xc68b62, 0x9b6a48].map(c => std(c, 0.7));
+  const hairs = [0x1e1a17, 0x3b2a20, 0x6b6b6b, 0xd9d9d9].map(c => std(c, 0.8));
+  const genShirts = [0x2f7fe0, 0x4a9be8, 0x1f5fae, 0x6fa8dc, 0x3c78c8].map(c => std(c, 0.7));
+  const pantsMats = [0x34404d, 0x4a5662, 0x5a4a3c, 0x2c3e57].map(c => std(c, 0.75));
+  const ringMat = {
+    gen: new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.85, depthWrite: false }),
+    pri: new THREE.MeshBasicMaterial({ color: 0xf08a24, transparent: true, opacity: 0.85, depthWrite: false }),
+  };
+
+  /* ---------------- shared geometries ---------------- */
+  const G = {
+    flat: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    torso: new THREE.CylinderGeometry(0.2, 0.17, 0.56, 12),
+    pelvis: new THREE.BoxGeometry(0.36, 0.16, 0.24),
+    neck: new THREE.CylinderGeometry(0.06, 0.06, 0.1, 8),
+    head: new THREE.SphereGeometry(0.13, 16, 12),
+    hair: new THREE.SphereGeometry(0.137, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    cap: new THREE.SphereGeometry(0.143, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.42),
+    mask: new THREE.BoxGeometry(0.2, 0.09, 0.06),
+    arm: new THREE.CylinderGeometry(0.052, 0.045, 0.56, 8).translate(0, -0.28, 0),
+    hand: new THREE.SphereGeometry(0.05, 8, 6),
+    legU: new THREE.CylinderGeometry(0.08, 0.065, 0.44, 8).translate(0, -0.22, 0),
+    legL: new THREE.CylinderGeometry(0.062, 0.05, 0.42, 8).translate(0, -0.21, 0),
+    shoe: new THREE.BoxGeometry(0.11, 0.07, 0.24),
+    ring: new THREE.RingGeometry(0.42, 0.5, 36).rotateX(-Math.PI / 2),
+    cSeat: new THREE.BoxGeometry(0.5, 0.07, 0.48),
+    cBack: new THREE.BoxGeometry(0.5, 0.52, 0.06),
+    cLeg: new THREE.BoxGeometry(0.04, 0.42, 0.42),
+    box: new THREE.BoxGeometry(1, 1, 1),
+    cyl: new THREE.CylinderGeometry(1, 1, 1, 12),
+    wheelBig: new THREE.TorusGeometry(0.29, 0.025, 8, 28),
+    wheelSmall: new THREE.TorusGeometry(0.06, 0.02, 6, 14),
+    spoke: new THREE.BoxGeometry(0.015, 0.56, 0.015),
+    hub: new THREE.CylinderGeometry(0.04, 0.04, 0.05, 10).rotateZ(Math.PI / 2),
+    tube: new THREE.CylinderGeometry(0.018, 0.018, 0.14, 8),
+    tubeCap: new THREE.CylinderGeometry(0.022, 0.022, 0.03, 8),
+    fill: new THREE.CylinderGeometry(0.02, 0.02, 0.13, 8).translate(0, 0.065, 0),
+    bar: new THREE.BoxGeometry(1.1, 0.07, 0.035).translate(0.55, 0, 0),
+    lamp: new THREE.SphereGeometry(0.09, 14, 10),
+    foliage: new THREE.IcosahedronGeometry(0.5, 1),
+    pot: new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.22, 0), new THREE.Vector2(0.3, 0.45), new THREE.Vector2(0.27, 0.5), new THREE.Vector2(0, 0.5)], 18),
+  };
+
+  function box(w, h, d, mat, x, y, z, parent, shadow = true) {
+    const m = new THREE.Mesh(G.box, mat);
+    m.scale.set(w, h, d); m.position.set(x, y, z);
+    m.castShadow = shadow; m.receiveShadow = true;
+    (parent || scene).add(m);
+    return m;
+  }
+  function cyl(r, h, mat, x, y, z, parent) {
+    const m = new THREE.Mesh(G.cyl, mat);
+    m.scale.set(r, h, r); m.position.set(x, y, z);
+    m.castShadow = true; m.receiveShadow = true;
+    (parent || scene).add(m);
+    return m;
+  }
+
+  /* ---------------- lights ---------------- */
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xcfdbe3, 1.7));
+  const sun = new THREE.DirectionalLight(0xfff6ea, 2.4);
+  sun.position.set(10, 24, 16);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 22, bottom: -22, near: 1, far: 70 });
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+  sun.target.position.set(-1, 0, 1);
+  scene.add(sun, sun.target);
+
+  /* ---------------- floor & walls ---------------- */
+  const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0 });
+  const floor = new THREE.Mesh(scaleUV(new THREE.PlaneGeometry(45, 21), 15, 7), floorMat);
+  floor.rotation.x = -Math.PI / 2; floor.position.set(-1.5, 0, 2); floor.receiveShadow = true;
+  scene.add(floor);
+
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.8, side: THREE.DoubleSide });
+  function wall(w, h, x, z, rotY) {
+    const m = new THREE.Mesh(scaleUV(new THREE.PlaneGeometry(w, h), w / 3, h / 3), wallMat);
+    m.position.set(x, h / 2, z); m.rotation.y = rotY; m.receiveShadow = true; scene.add(m); return m;
+  }
+  const WALL_H = 4.4;
+  wall(42.5, WALL_H, -0.75, -8.2, 0);              // back wall
+  wall(12, WALL_H, -21.5, -2.2, Math.PI / 2);      // left wall
+  box(42.5, 0.14, 0.05, M.dark, -0.75, 0.07, -8.17, null, false);
+  box(0.05, 0.14, 12, M.dark, -21.47, 0.07, -2.2, null, false);
+
+  // entrance frame
+  box(0.25, 3.4, 0.25, M.white, -21.5, 1.7, 4.0);
+  box(0.25, 3.4, 0.25, M.white, -21.5, 1.7, 12.0);
+  box(0.3, 0.5, 8.3, M.white, -21.5, 3.45, 8.0);
+  const entSign = signMesh(signTexture('ทางเข้า', 'ห้องเจาะเลือด / ห้องตรวจ', '#173a57', 512, 128), 3.2, 0.8);
+  entSign.position.set(-21.3, 3.45, 8.0); entSign.rotation.y = Math.PI / 2; scene.add(entSign);
+
+  // glass partitions of the blood-draw room
+  function glassPanel(w, h, x, z, rotY) {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+    const p = new THREE.Mesh(G.box, M.glass); p.scale.set(w, h, 0.03); p.position.y = h / 2; g.add(p);
+    box(w, 0.06, 0.07, M.steel, 0, h, 0, g, false);
+    box(w, 0.1, 0.07, M.steel, 0, 0.05, 0, g, false);
+    box(0.06, h, 0.07, M.steel, -w / 2, h / 2, 0, g, false);
+    box(0.06, h, 0.07, M.steel, w / 2, h / 2, 0, g, false);
+    return g;
+  }
+  glassPanel(7.0, 2.5, -10.5, -4.7, Math.PI / 2);
+  glassPanel(5.2, 2.5, 10.5, -5.6, Math.PI / 2);
+
+  /* ---------------- tables layout ---------------- */
+  const TX = [-7.8, -3.6, 0, 3.6, 7.2];
+  const tables = TX.map((x, i) => ({
+    n: i + 1, x, priority: i === 0, state: 'idle', agent: null, ticket: null, t: 0, dur: 1, prog: 0,
+    chairZ: -3.5, signKey: '',
+  }));
+  // divider at z=-1.2 with gaps in front of each table
+  {
+    const gaps = tables.map(T => [T.x - (T.priority ? 1.25 : 0.65), T.x + (T.priority ? 1.25 : 0.65)]);
+    let x0 = -10.5;
+    for (const [a, b] of gaps) { if (a - x0 > 0.2) glassPanel(a - x0, 1.25, (a + x0) / 2, -1.2, 0); x0 = b; }
+    if (10.5 - x0 > 0.2) glassPanel(10.5 - x0, 1.25, (10.5 + x0) / 2, -1.2, 0);
+  }
+
+  /* ---------------- person model ---------------- */
+  function makePerson(o) {
+    const root = new THREE.Group();
+    const hips = new THREE.Group(); hips.position.y = 0.9; root.add(hips);
+    const add = (parent, geo, mat, x = 0, y = 0, z = 0) => {
+      const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+    };
+    add(hips, G.pelvis, o.pants, 0, 0.02, 0);
+    add(hips, G.torso, o.shirt, 0, 0.32, 0);
+    add(hips, G.neck, o.skin, 0, 0.64, 0);
+    add(hips, G.head, o.skin, 0, 0.77, 0);
+    add(hips, G.hair, o.hair, 0, 0.79, -0.015);
+    if (o.cap) add(hips, G.cap, o.cap, 0, 0.8, -0.01);
+    if (o.mask) add(hips, G.mask, o.mask, 0, 0.735, 0.105);
+    const arms = [], legs = [];
+    for (const s of [-1, 1]) {
+      const ap = new THREE.Group(); ap.position.set(s * 0.235, 0.56, 0); hips.add(ap);
+      add(ap, G.arm, o.shirt); add(ap, G.hand, o.skin, 0, -0.58, 0); arms.push(ap);
+      const up = new THREE.Group(); up.position.set(s * 0.1, 0, 0); hips.add(up); add(up, G.legU, o.pants);
+      const low = new THREE.Group(); low.position.y = -0.44; up.add(low);
+      add(low, G.legL, o.pants); add(low, G.shoe, M.shoe, 0, -0.43, 0.04);
+      legs.push({ up, low });
+    }
+    return { root, hips, arms, legs };
+  }
+  function poseHuman(p, walk, phase, sit, armOut = 0, push = false) {
+    const sw = Math.sin(phase) * 0.6 * walk;
+    p.hips.position.y = lerp(0.9 + (1 - Math.cos(phase * 2)) * 0.012 * walk, 0.5, sit);
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1, L = p.legs[i], A = p.arms[i];
+      L.up.rotation.x = lerp(sw * s, -Math.PI / 2, sit);
+      L.low.rotation.x = lerp(Math.max(0, sw * s) * 1.1 + 0.05 * walk, Math.PI / 2, sit);
+      let ax = lerp(-sw * s * 0.8, -0.45, sit);
+      if (push) ax = -0.78;
+      if (i === 0 && armOut > 0) ax = lerp(ax, -1.45, armOut);
+      A.rotation.x = ax;
+      A.rotation.z = s * 0.07;
+    }
+  }
+
+  /* ---------------- vehicles ---------------- */
+  function addWheel(parent, geo, x, y, z, r, list) {
+    const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+    const t = new THREE.Mesh(geo, M.rubber); t.rotation.y = Math.PI / 2; t.castShadow = true; g.add(t);
+    if (r > 0.2) {
+      const s1 = new THREE.Mesh(G.spoke, M.steel); g.add(s1);
+      const s2 = new THREE.Mesh(G.spoke, M.steel); s2.rotation.x = Math.PI / 2; g.add(s2);
+      g.add(new THREE.Mesh(G.hub, M.steel));
+    }
+    list.push({ g, r });
+  }
+  function makeWheelchair() {
+    const g = new THREE.Group(), wheels = [];
+    box(0.46, 0.07, 0.44, M.orange, 0, 0.465, 0, g);
+    box(0.46, 0.46, 0.05, M.orange, 0, 0.74, -0.24, g);
+    for (const s of [-1, 1]) {
+      box(0.03, 0.03, 0.52, M.steel, s * 0.25, 0.5, 0, g);
+      box(0.03, 0.62, 0.03, M.steel, s * 0.25, 0.72, -0.26, g);
+      box(0.03, 0.03, 0.14, M.steel, s * 0.25, 0.99, -0.32, g);
+      box(0.03, 0.4, 0.03, M.steel, s * 0.2, 0.3, 0.3, g);
+      box(0.03, 0.03, 0.3, M.steel, s * 0.25, 0.64, 0.02, g);
+      addWheel(g, G.wheelBig, s * 0.31, 0.3, -0.08, 0.3, wheels);
+      addWheel(g, G.wheelSmall, s * 0.22, 0.07, 0.3, 0.07, wheels);
+    }
+    box(0.36, 0.03, 0.14, M.steel, 0, 0.12, 0.38, g);
+    box(0.44, 0.06, 0.4, M.orangeSoft, 0, 0.6, 0.18, g); // lap blanket
+    return { group: g, wheels };
+  }
+  function makeStretcher() {
+    const g = new THREE.Group(), wheels = [];
+    box(0.72, 0.08, 2.0, M.steel, 0, 0.72, 0, g);
+    box(0.66, 0.12, 1.9, M.mattress, 0, 0.82, 0, g);
+    for (const s of [-1, 1]) {
+      box(0.03, 0.15, 1.3, M.orange, s * 0.37, 0.92, 0.05, g);
+      box(0.06, 0.6, 0.06, M.steel, 0, 0.4, s * 0.6, g);
+      addWheel(g, G.wheelSmall, -0.28, 0.07, s * 0.8, 0.07, wheels);
+      addWheel(g, G.wheelSmall, 0.28, 0.07, s * 0.8, 0.07, wheels);
+      box(0.03, 0.3, 0.03, M.steel, s * 0.28, 0.85, -1.02, g);
+    }
+    box(0.6, 0.05, 1.7, M.dark, 0, 0.12, 0, g);
+    box(0.6, 0.03, 0.03, M.steel, 0, 1.0, -1.05, g);
+    box(0.42, 0.08, 0.3, M.white, 0, 0.92, 0.75, g);
+    box(0.58, 0.05, 1.2, M.orange, 0, 1.15, -0.35, g); // blanket
+    return { group: g, wheels };
+  }
+
+  /* ---------------- chairs (instanced) ---------------- */
+  function chairParts(seatMat) {
+    return [
+      { geo: G.cSeat, mat: seatMat, m: new THREE.Matrix4().makeTranslation(0, 0.44, 0) },
+      { geo: G.cBack, mat: seatMat, m: new THREE.Matrix4().makeTranslation(0, 0.74, -0.25) },
+      { geo: G.cLeg, mat: M.steel, m: new THREE.Matrix4().makeTranslation(-0.22, 0.21, 0) },
+      { geo: G.cLeg, mat: M.steel, m: new THREE.Matrix4().makeTranslation(0.22, 0.21, 0) },
+    ];
+  }
+  function instanceChairs(list, seatMat) {
+    const d = new THREE.Object3D(), out = new THREE.Matrix4();
+    for (const p of chairParts(seatMat)) {
+      const im = new THREE.InstancedMesh(p.geo, p.mat, list.length);
+      list.forEach((s, i) => {
+        d.position.set(s.x, 0, s.z); d.rotation.set(0, s.h, 0); d.updateMatrix();
+        out.multiplyMatrices(d.matrix, p.m); im.setMatrixAt(i, out);
+      });
+      im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true;
+      scene.add(im);
+    }
+  }
+
+  // waiting hall seats (facing the board / -z)
+  const ROWS = [3.0, 4.7, 6.4];
+  const BLOCKS = [
+    { xs: [-8.4, -7.5, -6.6, -5.7, -4.8, -3.9], aisles: [-9.4, -2.6] },
+    { xs: [-1.3, -0.4, 0.5, 1.4, 2.3, 3.2], aisles: [-2.6, 4.3] },
+  ];
+  const seats = [];
+  ROWS.forEach((z, ri) => BLOCKS.forEach(b => b.xs.forEach(x => {
+    const aisle = Math.abs(x - b.aisles[0]) < Math.abs(x - b.aisles[1]) ? b.aisles[0] : b.aisles[1];
+    seats.push({ x, z, row: ri, lane: z - 0.85, aisle, h: Math.PI, occ: null });
+  })));
+  instanceChairs(seats, M.blue);
+
+  // exam waiting seats
+  const examSeats = [];
+  for (let z = 0; z <= 6; z++) {
+    examSeats.push({ x: 13.6, z, h: Math.PI / 2, occ: null });
+    examSeats.push({ x: 16.4, z, h: -Math.PI / 2, occ: null });
+  }
+  instanceChairs(examSeats, M.teal);
+
+  const spots = [{ x: -15, z: 2.8, occ: null }, { x: -13, z: 2.8, occ: null }, { x: -11, z: 2.8, occ: null }];
+  const examSpots = [{ x: 12.6, z: -4.4, occ: null }, { x: 12.6, z: -6.2, occ: null }];
+
+  /* ---------------- floor lanes (instanced dashes) ---------------- */
+  function dashes(polys, color) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const list = [], d = new THREE.Object3D();
+    for (const poly of polys) for (let i = 0; i < poly.length - 1; i++) {
+      const A = poly[i], B = poly[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz);
+      const n = Math.max(1, Math.floor(L / 0.9)), ang = Math.atan2(dx, dz);
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        d.position.set(A[0] + dx * t, 0.012, A[1] + dz * t); d.rotation.set(0, ang, 0); d.scale.set(0.16, 1, 0.5);
+        d.updateMatrix(); list.push(d.matrix.clone());
+      }
+    }
+    const im = new THREE.InstancedMesh(G.flat, mat, list.length);
+    list.forEach((m, i) => im.setMatrixAt(i, m));
+    im.receiveShadow = true; scene.add(im);
+  }
+  dashes([
+    [[-23.5, 9.5], [-12, 9.5], [-9.4, 8.2], [4.3, 8.2]],
+    [[-9.4, 8.2], [-9.4, 1.0]], [[-2.6, 8.2], [-2.6, 1.0]], [[4.3, 8.2], [4.3, 1.0]],
+    [[-9.4, 1.0], [7.2, 1.0]],
+    ...TX.slice(1).map(x => [[x, 1.0], [x, -1.0]]),
+  ], 0x2f7fe0);
+  dashes([
+    [[-23.5, 5.5], [-15, 5.5], [-11, 5.2]],
+    [[-15.5, 0.2], [-7.8, 0.2], [-7.8, -1.0]],
+  ], 0xf08a24);
+  dashes([
+    [[-7.8, -2.2], [12, -2.2], [15, -2.2], [15, 7]],
+    [[15, -3.4], [18.8, -3.4]],
+  ], 0x1aa39a);
+
+  // floor decals
+  function decal(drawFn, cw, ch, w, d, x, z) {
+    const c = makeCanvas(cw, ch), g = c.getContext('2d'); drawFn(g, cw, ch);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d),
+      new THREE.MeshStandardMaterial({ map: canvasTex(c), transparent: true, roughness: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, 0.013, z); m.receiveShadow = true; scene.add(m); return m;
+  }
+  decal((g, w, h) => {
+    g.fillStyle = 'rgba(240,138,36,0.16)'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#f08a24'; g.lineWidth = 10; g.setLineDash([26, 16]); g.strokeRect(8, 8, w - 16, h - 16);
+    g.setLineDash([]); g.lineWidth = 5;
+    for (let i = 0; i < 3; i++) { g.strokeRect(30 + i * 165, 40, 120, 260); }
+    g.fillStyle = '#c96a0d'; g.font = `bold 34px ${FONT}`; g.textAlign = 'center';
+    g.fillText('จุดรอ รถนั่ง / รถนอน', w / 2, h - 24);
+  }, 512, 384, 5.6, 4.2, -13, 2.7);
+  decal((g, w, h) => {
+    g.fillStyle = 'rgba(240,138,36,0.22)'; rr(g, 6, 6, w - 12, h - 12, 20); g.fill();
+    g.strokeStyle = '#f08a24'; g.lineWidth = 8; g.stroke();
+    g.fillStyle = '#c96a0d'; g.font = `bold 30px ${FONT}`; g.textAlign = 'center';
+    g.save(); g.translate(w / 2, h / 2); g.rotate(-Math.PI / 2); g.fillText('ช่องรถนั่ง / รถนอน', 0, 10); g.restore();
+  }, 160, 384, 1.5, 2.6, -7.8, -3.1);
+  decal((g, w, h) => {
+    g.fillStyle = 'rgba(26,163,154,0.18)'; rr(g, 6, 6, w - 12, h - 12, 24); g.fill();
+    g.fillStyle = '#137d76'; g.font = `bold 52px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('④ รอหน้าห้องตรวจ', w / 2, h / 2);
+  }, 640, 128, 5, 1, 15, 8.4);
+
+  /* ---------------- standing signs ---------------- */
+  function standSign(text, sub, bg, x, z, rotY = 0, w = 2.8) {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+    cyl(0.22, 0.05, M.dark, 0, 0.025, 0, g);
+    cyl(0.035, 2.3, M.steel, 0, 1.15, 0, g);
+    const s = signMesh(signTexture(text, sub, bg), w, w / 4); s.position.y = 2.3 + w / 8; g.add(s);
+    return g;
+  }
+  standSign('① กดรับบัตรคิว', 'ทั่วไป = คิว A • รถนั่ง/นอน = คิว B', '#173a57', -18.2, 7.6);
+  standSign('② พื้นที่นั่งรอ', 'คนไข้ทั่วไป • รอฟังเสียงเรียกคิว', '#2f7fe0', -2.6, 9.4);
+  standSign('② จุดรอรถนั่ง/นอน', 'เข้าโต๊ะ 1 ช่องทางพิเศษ', '#f08a24', -17.0, 1.6);
+  standSign('④ รอหน้าห้องตรวจ', 'หลังเจาะเลือดเสร็จ', '#1aa39a', 18.8, 7.4);
+
+  /* ---------------- kiosks ---------------- */
+  function makeKiosk(x, z, color, letter, sub) {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; scene.add(g);
+    const cHex = '#' + color.toString(16).padStart(6, '0');
+    box(0.72, 1.3, 0.46, M.white, 0, 0.65, 0, g);
+    box(0.74, 0.12, 0.48, new THREE.MeshStandardMaterial({ color, roughness: 0.5 }), 0, 1.12, 0, g);
+    const head = new THREE.Group(); head.position.set(0, 1.55, 0.05); head.rotation.x = -0.3; g.add(head);
+    box(0.72, 0.52, 0.12, M.white, 0, 0, 0, head);
+    const c = makeCanvas(256, 176), cg = c.getContext('2d');
+    cg.fillStyle = '#0f2c48'; cg.fillRect(0, 0, 256, 176);
+    cg.fillStyle = '#fff'; cg.textAlign = 'center'; cg.textBaseline = 'middle';
+    cg.font = `bold 28px ${FONT}`; cg.fillText('กดรับบัตรคิว', 128, 28);
+    cg.beginPath(); cg.arc(128, 92, 40, 0, Math.PI * 2); cg.fillStyle = cHex; cg.fill();
+    cg.fillStyle = '#fff'; cg.font = `bold 46px ${FONT}`; cg.fillText(letter, 128, 94);
+    cg.font = `22px ${FONT}`; cg.fillText(sub, 128, 154, 240);
+    const tex = canvasTex(c);
+    const screenMat = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.3 });
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.41), screenMat); scr.position.z = 0.062; head.add(scr);
+    box(0.26, 0.03, 0.02, M.dark, 0, 1.0, 0.235, g, false);
+    const paper = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.006).translate(0, -0.08, 0), M.white);
+    paper.position.set(0, 0.99, 0.245); paper.visible = false; g.add(paper);
+    const top = signMesh(signTexture(letter === 'A' ? 'คิวทั่วไป' : 'คิวรถนั่ง/นอน', null, cHex, 384, 96), 0.9, 0.225);
+    top.position.set(0, 2.05, 0); g.add(top);
+    return { g, screenMat, paper, press: 0 };
+  }
+  const kioskA = makeKiosk(-15, 10.6, 0x2f7fe0, 'A', 'คนไข้ทั่วไป');
+  const kioskB = makeKiosk(-15, 6.6, 0xf08a24, 'B', 'รถนั่ง / รถนอน');
+
+  /* ---------------- blood draw tables ---------------- */
+  const lampCols = { idle: 0x2ecc71, calling: 0xffb020, drawing: 0xff4757, done: 0x2ecc71 };
+  tables.forEach((T) => {
+    const g = new THREE.Group(); g.position.set(T.x, 0, 0); scene.add(g);
+    const w = T.priority ? 1.9 : 1.5, dz = T.priority ? -4.9 : -4.6;
+    T.deskZ = dz;
+    box(w, 0.06, 0.7, M.white, 0, 0.76, dz, g);
+    box(0.04, 0.73, 0.64, M.steel, -w / 2 + 0.04, 0.365, dz, g);
+    box(0.42, 0.62, 0.62, M.offwhite, w / 2 - 0.24, 0.32, dz, g);
+    box(w - 0.1, 0.42, 0.03, M.offwhite, 0, 0.5, dz + 0.32, g);
+    box(0.5, 0.08, 0.22, M.navy, 0.24, 0.83, dz + 0.22, g);
+    box(0.05, 0.2, 0.05, M.dark, -0.4, 0.89, dz - 0.2, g);
+    box(0.5, 0.32, 0.04, M.dark, -0.4, 1.12, dz - 0.2, g);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.28), M.screen);
+    scr.position.set(-0.4, 1.12, dz - 0.222); scr.rotation.y = Math.PI; g.add(scr);
+    box(0.32, 0.06, 0.1, M.white, 0.45, 0.82, dz - 0.05, g);
+    const capMats = [M.red, M.purple, M.blue, M.teal, M.yellow];
+    for (let i = 0; i < 5; i++) {
+      const tb = new THREE.Mesh(G.tube, M.glass); tb.position.set(0.33 + i * 0.06, 0.9, dz - 0.05); g.add(tb);
+      const cp = new THREE.Mesh(G.tubeCap, capMats[i]); cp.position.set(0.33 + i * 0.06, 0.985, dz - 0.05); g.add(cp);
+    }
+    const holder = new THREE.Mesh(G.tube, M.glass); holder.position.set(0.05, 0.86, dz + 0.05); g.add(holder);
+    T.fill = new THREE.Mesh(G.fill, M.red); T.fill.position.set(0.05, 0.79, dz + 0.05); T.fill.scale.y = 0.01; g.add(T.fill);
+    box(0.14, 0.16, 0.12, M.yellow, -w / 2 + 0.14, 0.87, dz + 0.15, g);
+    box(0.14, 0.03, 0.12, M.red, -w / 2 + 0.14, 0.965, dz + 0.15, g);
+    // nurse stool + nurse
+    const sz = dz - 0.95;
+    cyl(0.2, 0.06, M.dark, 0, 0.45, sz, g); cyl(0.03, 0.42, M.steel, 0, 0.22, sz, g); cyl(0.25, 0.03, M.dark, 0, 0.02, sz, g);
+    T.nurse = makePerson({ shirt: M.scrub, pants: M.scrubDark, skin: pick(skins), hair: hairs[Math.floor(Math.random() * 2)], cap: M.scrub, mask: M.mask });
+    T.nurse.root.position.set(0, 0, sz); g.add(T.nurse.root);
+    poseHuman(T.nurse, 0, 0, 1);
+    // patient chair (general tables)
+    if (!T.priority) {
+      const c = new THREE.Group(); c.position.set(0, 0, T.chairZ); c.rotation.y = Math.PI; g.add(c);
+      box(0.56, 0.08, 0.5, M.blue, 0, 0.44, 0, c);
+      box(0.56, 0.62, 0.07, M.blue, 0, 0.78, -0.27, c);
+      box(0.08, 0.06, 0.55, M.navy, -0.33, 0.66, 0.05, c);
+      box(0.08, 0.06, 0.75, M.navy, 0.33, 0.66, 0.15, c);
+      box(0.5, 0.4, 0.4, M.steel, 0, 0.2, 0, c);
+    }
+    // sign + status lamp + progress bar above the gap
+    const gh = T.priority ? 1.25 : 0.65;
+    cyl(0.035, 2.55, M.steel, gh + 0.1, 1.275, -1.2, g);
+    box(gh + 0.2, 0.04, 0.04, M.steel, (gh + 0.1) / 2, 2.52, -1.2, g, false);
+    const sc = makeCanvas(256, 128);
+    T.signCtx = sc.getContext('2d'); T.signTex = canvasTex(sc);
+    const sign = signMesh(T.signTex, 1.2, 0.6); sign.position.set(0, 2.15, -1.2); g.add(sign);
+    T.lampMat = new THREE.MeshStandardMaterial({ color: 0x2ecc71, emissive: 0x2ecc71, emissiveIntensity: 1.2 });
+    const lamp = new THREE.Mesh(G.lamp, T.lampMat); lamp.position.set(-0.7, 2.15, -1.2); g.add(lamp);
+    box(1.14, 0.09, 0.03, M.dark, 0, 1.76, -1.21, g, false);
+    T.bar = new THREE.Mesh(G.bar, new THREE.MeshBasicMaterial({ color: 0xff4757, toneMapped: false }));
+    T.bar.position.set(-0.55, 1.76, -1.18); T.bar.scale.x = 0.001; g.add(T.bar);
+  });
+
+  function drawTableSign(T) {
+    const g = T.signCtx, W = 256, H = 128;
+    g.clearRect(0, 0, W, H);
+    rr(g, 3, 3, W - 6, H - 6, 16); g.fillStyle = '#10263b'; g.fill();
+    rr(g, 8, 8, 92, H - 16, 12); g.fillStyle = T.priority ? '#f08a24' : '#2f7fe0'; g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `bold 22px ${FONT}`; g.fillText('โต๊ะ', 54, 32);
+    g.font = `bold 62px ${FONT}`; g.fillText(String(T.n), 54, 82);
+    const idle = T.state === 'idle' || T.state === 'done';
+    g.fillStyle = idle ? '#8aa1b5' : (T.state === 'calling' ? '#ffd166' : '#ffffff');
+    g.font = `bold 46px ${FONT}`; g.fillText(T.ticket || '—', 176, 54, 140);
+    const st = { idle: 'ว่าง', done: 'เสร็จแล้ว', calling: 'เชิญเข้าโต๊ะ', drawing: 'กำลังเจาะ' }[T.state];
+    g.fillStyle = { idle: '#6ee7a0', done: '#9fd0ff', calling: '#ffd166', drawing: '#ff8a95' }[T.state];
+    g.font = `20px ${FONT}`; g.fillText(st, 176, 100);
+    T.signTex.needsUpdate = true;
+  }
+
+  /* ---------------- main queue board ---------------- */
+  const boardCanvas = makeCanvas(1024, 448), bctx = boardCanvas.getContext('2d');
+  const boardTex = canvasTex(boardCanvas);
+  box(6.65, 3.05, 0.1, M.dark, 0, 2.75, -8.14, null, false);
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 2.8), new THREE.MeshBasicMaterial({ map: boardTex, toneMapped: false }));
+  board.position.set(0, 2.75, -8.08); scene.add(board);
+
+  /* ---------------- exam doors ---------------- */
+  const doors = [{ x: 16.2, label: 'ห้องตรวจ 1' }, { x: 18.8, label: 'ห้องตรวจ 2' }];
+  doors.forEach(d => {
+    const dark = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), M.doorDark);
+    dark.position.set(d.x, 1.1, -8.18); scene.add(dark);
+    box(0.08, 2.3, 0.1, M.white, d.x - 0.64, 1.15, -8.15);
+    box(0.08, 2.3, 0.1, M.white, d.x + 0.64, 1.15, -8.15);
+    box(1.36, 0.08, 0.1, M.white, d.x, 2.3, -8.15);
+    d.pivot = new THREE.Group(); d.pivot.position.set(d.x - 0.6, 0, -8.13); scene.add(d.pivot);
+    box(1.18, 2.18, 0.04, M.wood, 0.59, 1.1, 0, d.pivot);
+    box(0.04, 0.2, 0.05, M.steel, 1.05, 1.05, 0.04, d.pivot);
+    const s = signMesh(signTexture(d.label, null, '#1aa39a', 384, 96), 1.2, 0.3);
+    s.position.set(d.x, 2.6, -8.1); scene.add(s);
+    d.open = 0;
+  });
+
+  /* ---------------- decor ---------------- */
+  function plant(x, z, s = 1) {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
+    const p = new THREE.Mesh(G.pot, M.pot); p.castShadow = true; g.add(p);
+    const f1 = new THREE.Mesh(G.foliage, M.plant); f1.position.y = 0.95; f1.scale.set(0.9, 1.1, 0.9); f1.castShadow = true; g.add(f1);
+    const f2 = new THREE.Mesh(G.foliage, M.plant); f2.position.set(0.15, 1.45, -0.05); f2.scale.setScalar(0.6); f2.castShadow = true; g.add(f2);
+  }
+  plant(-20.6, -7.4); plant(-11.2, -0.3, 0.8); plant(9.6, 9.2); plant(20.0, 9.5); plant(-20.6, 3.2, 0.9); plant(10.0, -0.4, 0.8);
+  // water dispenser
+  box(0.4, 1.0, 0.4, M.white, -20.8, 0.5, -1.0);
+  cyl(0.16, 0.42, new THREE.MeshStandardMaterial({ color: 0x9fd3f0, transparent: true, opacity: 0.7, roughness: 0.1 }), -20.8, 1.21, -1.0);
+  // wall clock
+  const clockG = new THREE.Group(); clockG.position.set(-15, 3.1, -8.12); scene.add(clockG);
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.05, 32).rotateX(Math.PI / 2), M.white); clockG.add(face);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.04, 8, 32), M.navy); clockG.add(rim);
+  const hHand = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.25, 0.02).translate(0, 0.11, 0), M.dark); hHand.position.z = 0.04; clockG.add(hHand);
+  const mHand = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.38, 0.02).translate(0, 0.17, 0), M.dark); mHand.position.z = 0.05; clockG.add(mHand);
+  const deptSign = signMesh(signTexture('ห้องเจาะเลือด', 'Blood Collection • 5 โต๊ะบริการ', '#173a57', 512, 128), 3.2, 0.8);
+  deptSign.position.set(-6.0, 3.6, -8.1); scene.add(deptSign);
+
+  /* ---------------- simulation state ---------------- */
+  const WALK = 1.55;
+  const CYCLE = 32;
+  const EVENTS = [
+    { t: 0.5, k: 'gen' }, { t: 3.0, k: 'gen' }, { t: 4.2, k: 'wheel' }, { t: 6.5, k: 'gen' },
+    { t: 9.5, k: 'gen' }, { t: 12.5, k: 'gen' }, { t: 15.5, k: 'gen' }, { t: 18.0, k: 'stretch' },
+    { t: 19.5, k: 'gen' }, { t: 22.5, k: 'gen' }, { t: 26.0, k: 'gen' }, { t: 29.0, k: 'gen' },
+  ];
+  const agents = [];
+  const genQueue = [], priQueue = [];
+  let genNo = 0, priNo = 0, doneCount = 0, examDone = 0;
+  let simT = 0;
+  let uiDirty = true;
+  const callLog = [];
+  const dirty = () => { uiDirty = true; };
+
+  function makeLabel(text, pri) {
+    const c = makeCanvas(192, 96), g = c.getContext('2d');
+    rr(g, 6, 6, 180, 84, 22); g.fillStyle = pri ? '#f08a24' : '#2f7fe0'; g.fill();
+    g.lineWidth = 6; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `bold 54px ${FONT}`; g.fillText(text, 96, 52);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(c), depthWrite: false, toneMapped: false }));
+    s.scale.set(0.001, 0.001, 1); s.renderOrder = 10;
+    return s;
+  }
+
+  function createAgent(kind) {
+    const a = {
+      kind, pri: kind !== 'gen', root: new THREE.Group(), heading: 0, targetHeading: 0, path: null,
+      waitT: 0, waitFn: null, sit: 0, sitTarget: 0, arm: 0, armTarget: 0, walk: 0, speedNow: 0,
+      phase: Math.random() * 6, wheels: [], label: null, labelPop: -1, state: 'arrive',
+      seat: null, spot: null, eseat: null, espot: null, ticket: null, porter: null,
+      rec: null, queued: false, ready: false,   // โหมดข้อมูลจริง: rec = บัตรคิวจากฐาน, ready = ถึงคิวเจาะแล้ว
+    };
+    const skin = pick(skins), hair = pick(hairs);
+    if (kind === 'gen') {
+      a.person = makePerson({ shirt: pick(genShirts), pants: pick(pantsMats), skin, hair });
+      a.root.add(a.person.root);
+      a.labelY = 2.2;
+    } else {
+      const v = kind === 'wheel' ? makeWheelchair() : makeStretcher();
+      a.root.add(v.group); a.wheels = v.wheels;
+      a.person = makePerson({ shirt: M.gown, pants: M.gown, skin, hair });
+      a.root.add(a.person.root);
+      if (kind === 'wheel') { a.sit = a.sitTarget = 1; a.person.root.position.z = -0.02; }
+      else {
+        a.person.root.rotation.order = 'YXZ';
+        a.person.root.rotation.set(-Math.PI / 2, Math.PI, 0);
+        a.person.root.position.set(0, 1.05, -0.9);
+      }
+      a.porter = makePerson({ shirt: M.green, pants: M.greenDark, skin: pick(skins), hair: pick(hairs) });
+      a.porter.root.position.z = kind === 'wheel' ? -0.78 : -1.45;
+      a.root.add(a.porter.root);
+      a.labelY = kind === 'wheel' ? 1.75 : 1.7;
+    }
+    const ring = new THREE.Mesh(G.ring, a.pri ? ringMat.pri : ringMat.gen);
+    ring.position.y = 0.02;
+    if (kind === 'wheel') { ring.scale.set(1.3, 1, 1.6); ring.position.z = -0.15; }
+    if (kind === 'stretch') { ring.scale.set(1.5, 1, 3.0); ring.position.z = -0.2; }
+    a.root.add(ring);
+    a.root.traverse(o => { if (o.isMesh && o !== ring) o.castShadow = true; });
+    scene.add(a.root);
+    agents.push(a);
+    return a;
+  }
+
+  function removeAgent(a) {
+    scene.remove(a.root);
+    if (a.label) { a.label.material.map.dispose(); a.label.material.dispose(); }
+    const i = agents.indexOf(a); if (i >= 0) agents.splice(i, 1);
+    if (a.rec) {                                  // ปล่อยบัตรคิวจริงที่ผูกไว้ และปิดไม่ให้เดินเข้ามาใหม่
+      if (a.rec.agent === a) a.rec.agent = null;
+      live.closed.add(a.rec.key);
+      a.rec = null;
+    }
+    examDone++; dirty();
+  }
+
+  const pos = (a) => ({ x: a.root.position.x, z: a.root.position.z });
+  function after(a, t, fn) { a.waitT = t; a.waitFn = fn; }
+
+  function trapezoid(t, dur, ta) {
+    if (t >= dur) return 1;
+    const v = 1 / (dur - ta);
+    if (t < ta) return 0.5 * v * t * t / ta;
+    if (t > dur - ta) { const r = dur - t; return 1 - 0.5 * v * r * r / ta; }
+    return 0.5 * v * ta + v * (t - ta);
+  }
+  function setPath(a, pts, faceEnd, onDone) {
+    const P = [];
+    for (const p of pts) { const l = P[P.length - 1]; if (!l || Math.hypot(p.x - l.x, p.z - l.z) > 0.02) P.push({ x: p.x, z: p.z }); }
+    if (P.length < 2) { a.path = null; if (faceEnd != null) a.targetHeading = faceEnd; if (onDone) onDone(); return; }
+    const cum = [0];
+    for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i].x - P[i - 1].x, P[i].z - P[i - 1].z));
+    const len = cum[cum.length - 1], sp = a.pri ? WALK * 0.85 : WALK;
+    const ta = Math.min(0.5, (len / sp) * 0.5);
+    a.path = { pts: P, cum, len, t: 0, dur: len / sp + ta, ta, faceEnd, onDone };
+  }
+
+  // text = เลขคิวจริงจากฐาน (lab_blood_queue_ref) ถ้ามี ไม่มีก็ออกเลขจำลอง A001/B001
+  function issueTicket(a, text) {
+    if (text) a.ticket = String(text);
+    else if (a.pri) { priNo = priNo % 999 + 1; a.ticket = 'B' + String(priNo).padStart(3, '0'); }
+    else { genNo = genNo % 999 + 1; a.ticket = 'A' + String(genNo).padStart(3, '0'); }
+    a.label = makeLabel(a.ticket, a.pri);
+    a.label.position.y = a.labelY;
+    a.root.add(a.label);
+    a.labelPop = 0;
+  }
+
+  function pickSeat() {
+    const free = seats.filter(s => !s.occ);
+    if (!free.length) return null;
+    const minRow = Math.min(...free.map(s => s.row));
+    return pick(free.filter(s => s.row === minRow));
+  }
+
+  function spawn(kind, manual, rec) {
+    let seat = null, spot = null;
+    if (kind === 'gen') {
+      seat = pickSeat();
+      if (!seat) { if (manual) toast('ที่นั่งรอเต็มแล้ว กรุณารอสักครู่'); return null; }
+    } else {
+      spot = spots.find(s => !s.occ);
+      if (!spot) { if (manual) toast('จุดรอรถนั่ง/รถนอนเต็มแล้ว'); return null; }
+    }
+    const a = createAgent(kind);
+    if (rec) { a.rec = rec; rec.agent = a; }
+    if (seat) { seat.occ = a; a.seat = seat; }
+    if (spot) { spot.occ = a; a.spot = spot; }
+    const laneZ = a.pri ? 5.5 : 9.5;
+    a.root.position.set(-23.6 - Math.random() * 0.4, 0, laneZ);
+    a.heading = a.targetHeading = Math.PI / 2;
+    const kx = kind === 'gen' ? -15 + rand(-0.1, 0.1) : (kind === 'wheel' ? -14.25 : -13.6);
+    setPath(a, [pos(a), { x: kx, z: laneZ }], a.pri ? null : 0, () => atKiosk(a));
+    if (manual) toast({ gen: 'เพิ่มคนไข้ทั่วไป 1 ราย', wheel: 'เพิ่มคนไข้รถนั่ง 1 ราย', stretch: 'เพิ่มคนไข้รถนอน 1 ราย' }[kind]);
+    dirty();
+    return a;
+  }
+
+  function atKiosk(a) {
+    const k = a.pri ? kioskB : kioskA;
+    k.press = 1; a.state = 'ticket';
+    if (!a.pri) a.armTarget = 1;
+    after(a, 1.4, () => {
+      issueTicket(a, a.rec && a.rec.label); a.armTarget = 0; dirty();
+      after(a, 0.5, () => goWait(a));
+    });
+  }
+
+  /* เข้าคิวรอเรียก — โหมดจำลองเข้าคิวทันทีที่นั่งลง
+     โหมดข้อมูลจริงต้องรอให้ฐานบอกว่าถึงคิวแล้ว (ห้องแล็บรับ Lab หรือคิวถูกเรียก/ปิด) */
+  function enqueue(a) {
+    if (a.queued || a.state !== 'waiting') return;
+    if (live.on && !a.ready) return;
+    a.queued = true;
+    (a.pri ? priQueue : genQueue).push(a);
+  }
+  function unqueue(a) {
+    if (!a.queued) return;
+    const q = a.pri ? priQueue : genQueue, i = q.indexOf(a);
+    if (i >= 0) q.splice(i, 1);
+    a.queued = false;
+  }
+
+  function goWait(a) {
+    a.state = 'toWait';
+    if (!a.pri) {
+      const s = a.seat;
+      setPath(a, [pos(a), { x: -12, z: 9.5 }, { x: s.aisle, z: 8.2 }, { x: s.aisle, z: s.lane }, { x: s.x, z: s.lane }, { x: s.x, z: s.z }], Math.PI, () => {
+        a.sitTarget = 1; a.state = 'waiting';
+        after(a, 0.6, () => { enqueue(a); dirty(); });
+      });
+    } else {
+      const s = a.spot;
+      setPath(a, [pos(a), { x: s.x, z: 5.2 }, { x: s.x, z: s.z }], Math.PI, () => {
+        a.state = 'waiting'; enqueue(a); dirty();
+      });
+    }
+    dirty();
+  }
+
+  function callAgent(a, T) {
+    T.state = 'calling'; T.agent = a; T.ticket = a.ticket; T.prog = 0;
+    a.state = 'called'; a.queued = false;
+    announce(live.on ? `🩸 คิว ${a.ticket} เข้าเจาะเลือดที่โต๊ะ ${T.n}` : `🔔 เชิญหมายเลข ${a.ticket} ที่โต๊ะ ${T.n}`, a.pri);
+    callLog.unshift({ ticket: a.ticket, table: T.n, pri: a.pri, time: clockStr() });
+    if (callLog.length > 6) callLog.pop();
+    if (!a.pri) {
+      a.sitTarget = 0;
+      after(a, 0.7, () => {
+        const s = a.seat; a.seat = null; s.occ = null;
+        setPath(a, [pos(a), { x: s.x, z: s.lane }, { x: s.aisle, z: s.lane }, { x: s.aisle, z: 1.0 }, { x: T.x, z: 1.0 }, { x: T.x, z: -1.2 }, { x: T.x, z: T.chairZ }], Math.PI, () => arriveTable(a, T));
+      });
+    } else {
+      after(a, 0.5, () => {
+        const s = a.spot; a.spot = null; s.occ = null;
+        const vz = a.kind === 'wheel' ? -3.85 : -3.3;
+        setPath(a, [pos(a), { x: s.x, z: 0.2 }, { x: T.x, z: 0.2 }, { x: T.x, z: vz }], Math.PI, () => arriveTable(a, T));
+      });
+    }
+    dirty();
+  }
+
+  function arriveTable(a, T) {
+    T.state = 'drawing'; T.t = 0; T.prog = 0;
+    T.dur = a.pri ? rand(7, 9) : rand(4.5, 6.5);
+    a.state = 'drawing';
+    if (!a.pri) a.sitTarget = 1;
+    after(a, 0.5, () => { if (a.kind !== 'stretch') a.armTarget = 1; });
+    dirty();
+  }
+
+  function finishDraw(T) {
+    const a = T.agent;
+    T.state = 'done'; T.prog = 1;
+    a.armTarget = 0; a.state = 'doneDraw';
+    doneCount++;
+    announce(`✅ ${a.ticket} เจาะเลือดเสร็จ → ไปรอหน้าห้องตรวจ`, a.pri);
+    after(a, 0.6, () => {
+      if (!a.pri) a.sitTarget = 0;
+      after(a, a.pri ? 0.2 : 0.7, () => {
+        T.state = 'idle'; T.agent = null; T.prog = 0; dirty();
+        goExam(a, T);
+      });
+    });
+    dirty();
+  }
+
+  function goExam(a, T) {
+    a.state = 'toExam';
+    const p0 = pos(a);
+    if (!a.pri) {
+      const free = examSeats.filter(s => !s.occ);
+      const pts = [p0, { x: T.x, z: -2.2 }, { x: 12, z: -2.2 }, { x: 15, z: -2.2 }];
+      if (free.length) {
+        const s = pick(free); s.occ = a; a.eseat = s;
+        pts.push({ x: 15, z: s.z }, { x: s.x, z: s.z });
+        setPath(a, pts, s.h, () => { a.sitTarget = 1; a.state = 'examWait'; after(a, rand(6, 11), () => goDoor(a)); dirty(); });
+      } else {
+        pts.push({ x: 15, z: -3.4 });
+        setPath(a, pts, null, () => goDoor(a));
+      }
+    } else {
+      const s = examSpots.find(e => !e.occ);
+      const pts = [p0, { x: T.x, z: -2.2 }, { x: 11.3, z: -2.2 }];
+      if (s) {
+        s.occ = a; a.espot = s;
+        pts.push({ x: 11.3, z: s.z }, { x: s.x, z: s.z });
+        setPath(a, pts, Math.PI / 2, () => { a.state = 'examWait'; after(a, rand(7, 12), () => goDoor(a)); dirty(); });
+      } else setPath(a, pts, null, () => goDoor(a));
+    }
+    dirty();
+  }
+
+  function goDoor(a) {
+    a.state = 'toDoor';
+    const d = pick(doors);
+    const seated = !!a.eseat;
+    if (a.eseat) { a.eseat.occ = null; a.eseat = null; }
+    if (a.espot) { a.espot.occ = null; a.espot = null; }
+    a.sitTarget = a.kind === 'wheel' ? 1 : 0;
+    after(a, a.pri ? 0.2 : (seated ? 0.7 : 0), () => {
+      const p = pos(a);
+      let pts;
+      if (!a.pri) pts = [p, { x: 15, z: p.z }, { x: 15, z: -3.4 }, { x: d.x, z: -3.4 }, { x: d.x, z: -7.6 }, { x: d.x, z: -9.8 }];
+      else pts = [p, { x: d.x, z: p.z }, { x: d.x, z: -10.4 }];
+      setPath(a, pts, null, () => removeAgent(a));
+    });
+    dirty();
+  }
+
+  function dispatch() {
+    for (const T of tables) {
+      if (T.state !== 'idle') continue;
+      const q = T.priority ? priQueue : genQueue;
+      if (!q.length) continue;
+      // ถ้าฐานบอกช่อง/โต๊ะที่เรียก (call_slot_number) ให้ไปโต๊ะนั้น ไม่งั้นตามลำดับคิว
+      let i = 0;
+      if (live.on) { const j = q.findIndex(a => a.rec && Number(a.rec.slot) === T.n); if (j >= 0) i = j; }
+      callAgent(q.splice(i, 1)[0], T);
+    }
+  }
+
+  /* ---------------- seeding (scene alive from first frame) ---------------- */
+  function seedSeated(kind) {
+    const a = createAgent(kind);
+    if (kind === 'gen') {
+      const s = pickSeat(); if (!s) return;
+      s.occ = a; a.seat = s;
+      a.root.position.set(s.x, 0, s.z); a.sit = a.sitTarget = 1;
+      genQueue.push(a);
+    } else {
+      const s = spots.find(p => !p.occ); s.occ = a; a.spot = s;
+      a.root.position.set(s.x, 0, s.z);
+      priQueue.push(a);
+    }
+    a.heading = a.targetHeading = Math.PI;
+    issueTicket(a); a.labelPop = 1; a.label.scale.set(0.9, 0.45, 1);
+    a.state = 'waiting';
+  }
+  function seedExam() {
+    const a = createAgent('gen');
+    const free = examSeats.filter(s => !s.occ); const s = pick(free);
+    s.occ = a; a.eseat = s;
+    a.root.position.set(s.x, 0, s.z); a.heading = a.targetHeading = s.h; a.sit = a.sitTarget = 1;
+    issueTicket(a); a.labelPop = 1; a.label.scale.set(0.9, 0.45, 1);
+    a.state = 'examWait';
+    after(a, rand(3, 9), () => goDoor(a));
+  }
+  function seedDemo() {
+    seedExam(); seedExam();
+    for (let i = 0; i < 6; i++) seedSeated('gen');
+    seedSeated('wheel');
+  }
+  seedDemo();
+
+  /* ================= เชื่อมต่อ HOSxP: คิวเจาะเลือด + การรับ Lab =================
+     ตาราง lab_blood_queue / lab_blood_queue_type / lab_head (โครงสร้างยืนยันกับ
+     ppbh_hosxp เมื่อ 18/11/2569) — ชั้นเชื่อมต่อ session + SQL ใช้แนวทางเดียวกับ
+     LabReport\blood-queue.html ที่ทดสอบกับฐานจริงแล้ว ส่ง SQL แบบอ่านเท่านั้น
+
+     กติกาที่ใช้ขับฉาก 3 มิติ
+       บัตรคิวใหม่ในฐาน                  → คนไข้เดินเข้า กดบัตรคิว ไปนั่งรอ (ป้ายคิว = lab_blood_queue_ref)
+       คิวถูกเรียก/ปิด หรือห้องแล็บรับ Lab  → เรียกเข้าโต๊ะ เจาะเลือด แล้วเดินไปรอหน้าห้องตรวจ
+     ที่โรงพยาบาลจริง lab_blood_queue มักไม่บันทึก complete/call_status (NULL ทั้งตาราง)
+     การรับ Lab ของ visit เดียวกันจึงเป็นสัญญาณหลักว่า "เจาะแล้ว" */
+  const APP_NAME = 'BMS-Lab3D';
+  const PASTEJSON_URL = 'https://hosxp.net/phapi/PasteJSON';
+  const SID_PARAM = 'bms-session-id', LS_SID = 'lab3d.sid', LS_OPT = 'lab3d.opt';
+  const TIMEOUT_MS = 60000, URL_MAX = 2000, PAGE_SIZE = 1000;
+  const MAX_AGENTS = 42;                       // คนในฉากพร้อมกันมากสุด (ที่นั่ง 36 + จุดรถนั่ง/นอน 3)
+  const BQ = 'lab_blood_queue', BQT = 'lab_blood_queue_type';
+
+  const live = {
+    on: false, conn: null, user: null, pg: true, engine: '', cols: {}, probed: false,
+    types: new Map(), map: new Map(), closed: new Set(), day: null, first: true, busy: false, timer: null,
+    loadedAt: null, extra: 0, labOk: false, labErr: '', stats: null,
+    opt: { sec: 30, useLab: true, kinds: {} },  // kinds: รหัสประเภทคิว → ตัวละครในฉาก
+  };
+
+  /* ---- เครื่องมือทั่วไป ---- */
+  const strv = v => (v == null ? '' : String(v).trim());
+  const sq = v => "'" + String(v ?? '').replace(/['\\]/g, '') + "'";
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const val = (row, key) => row[key] ?? row[key.toUpperCase()];
+  const okRes = r => !!r && r.MessageCode === 200 && Array.isArray(r.data);
+  const isAuthErr = r => !!r && !r.network && (r.MessageCode === 401 || /authoriz/i.test(String(r.Message || '')));
+  const flag = v => /^(y|1|t|true)$/i.test(strv(v));
+  const realMin = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
+  const hm = m => m == null ? '–' : String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  function parseMin(v) {
+    const s = strv(v), m = s.match(/(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    const x = Number(m[1]) * 60 + Number(m[2]);
+    return x >= 0 && x < 1440 ? x : null;
+  }
+  function dayNum(ymd) { const [y, m, d] = ymd.slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; }
+  function ymdOf(day) { return new Date(day * 864e5).toISOString().slice(0, 10); }
+  function todayNum() { const n = new Date(); return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 864e5; }
+
+  /* ---- session + SQL ---- */
+  function saveSid(s) { try { localStorage.setItem(LS_SID, s); } catch (e) {} }
+  function loadSid() { try { return localStorage.getItem(LS_SID) || ''; } catch (e) { return ''; } }
+  function forgetSid() { try { localStorage.removeItem(LS_SID); } catch (e) {} }
+  // tunnel ของ HOSxP ไม่ส่ง CORS header ให้หน้าเว็บบน localhost → ผ่าน /proxy ของ serve.py/serve.ps1
+  function proxied(u) {
+    const direct = location.protocol === 'file:' || /(^|\.)hosxp\.net$/i.test(location.hostname);
+    return direct ? u : `${location.origin}/proxy?url=${encodeURIComponent(u)}`;
+  }
+  async function fetchJson(url, headers) {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json', ...(headers || {}) }, signal: ctrl.signal });
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (e) {}
+      if (!json || typeof json !== 'object') {
+        return { MessageCode: res.ok ? 0 : res.status, http: res.status, empty: !text.trim(), nonJson: true,
+                 Message: `HTTP ${res.status} (${text.trim() ? 'ตอบกลับไม่ใช่ JSON' : 'ตอบกลับว่าง'})` };
+      }
+      if (json.MessageCode == null) json.MessageCode = res.status;
+      json.http = res.status;
+      return json;
+    } catch (e) {
+      return { MessageCode: 0, network: true, Message: e.name === 'AbortError' ? 'หมดเวลารอ (timeout)' : 'Network: ' + e.message };
+    } finally { clearTimeout(tid); }
+  }
+  function extractConn(data) {
+    const r = data.result || {}, ui = r.user_info || {};
+    const kv = (r.key_value && typeof r.key_value === 'object') ? r.key_value : {};
+    const apiUrl = kv['hosxp.api_url'] || ui['hosxp.api_url'] || ui.bms_url || '';
+    const authKey = kv['hosxp.api_auth_key'] || ui['hosxp.api_auth_key'] || ui.bms_session_code || (typeof r.key_value === 'string' ? r.key_value : '');
+    const clean = String(apiUrl).replace(/\/+$/, '').replace(/\/api(\/sql)?$/i, '').replace(/\/+$/, '');
+    return { apiUrl: clean, authKey: String(authKey || ''), user: ui };
+  }
+  function explain(r) {
+    if (!r) return 'ไม่ทราบสาเหตุ';
+    if (r.network) {
+      return location.protocol === 'file:'
+        ? 'ส่งคำสั่งไม่ได้ เพราะเปิดไฟล์ตรงจากดิสก์ — ใช้ start.bat แล้วเปิด http://localhost:8804/index.html'
+        : 'ส่งคำสั่งไป HOSxP ไม่ได้ (' + r.Message + ') — ถ้าเปิดจากเครื่องตัวเอง ให้เปิดผ่าน start.bat';
+    }
+    if (isAuthErr(r)) return `Session หมดอายุหรือไม่ถูกต้อง (${r.MessageCode}) — ขอ session ID ใหม่จาก HOSxP`;
+    return `${r.MessageCode}: ${r.Message || 'ผิดพลาด'}`;
+  }
+  const BUSY_CODES = [409, 501, 503, 504];
+  const SQL_ERR_RE = /does not exist|doesn'?t exist|unknown (column|table|field)|no such (column|table)|syntax error|undefined (column|table|function)|ambiguous|validation/i;
+  let sqlChain = Promise.resolve();
+  function sql(text) { const job = () => runSql(text); const p = sqlChain.then(job, job); sqlChain = p.catch(() => {}); return p; }
+  async function runSql(text) {
+    if (!live.conn) return { MessageCode: 0, Message: 'ยังไม่ได้เชื่อมต่อ' };
+    const s = text.replace(/\s+/g, ' ').trim();
+    const target = `${live.conn.apiUrl}/api/sql?sql=${encodeURIComponent(s)}&app=${encodeURIComponent(APP_NAME)}`;
+    if (target.length > URL_MAX) return { MessageCode: 414, Message: `คำสั่งยาว ${target.length} ตัวอักษร เกินที่ tunnel รับได้` };
+    let r;
+    for (let a = 0; ; a++) {
+      r = await fetchJson(proxied(target), { Authorization: `Bearer ${live.conn.authKey}` });
+      const busy = !isAuthErr(r) && !SQL_ERR_RE.test(String(r.Message || ''))
+        && (r.empty || BUSY_CODES.includes(r.MessageCode) || BUSY_CODES.includes(r.http) || (r.network && a < 2));
+      if (!busy || a >= 4) break;
+      await sleep(Math.min(1500, 300 * 2 ** a) + Math.random() * 150);
+    }
+    if (!okRes(r)) console.warn(`[sql] ERR ${r.MessageCode} ${r.Message || ''}\n${s}`);
+    if (isAuthErr(r)) sessionLost();
+    return r;
+  }
+  async function fetchRows(text) { const r = await sql(text); return okRes(r) ? r.data : null; }
+  async function mustRows(text, what) { const r = await sql(text); if (!okRes(r)) throw new Error(`${what}: ${explain(r)}`); return r.data; }
+  async function keyset(build, idOf, what) {
+    let all = [], cur = null;
+    for (let guard = 0; guard < 400; guard++) {
+      const page = await mustRows(build(cur), what);
+      all = all.concat(page);
+      if (page.length < PAGE_SIZE) break;
+      const next = idOf(page[page.length - 1]);
+      if (next == null || next === cur) break;
+      cur = next;
+    }
+    return all;
+  }
+
+  /* ---- โครงสร้างตาราง + เชื่อมต่อ ---- */
+  async function probeSchema() {
+    const list = [BQ, BQT, 'lab_head'].map(sq).join(',');
+    const r = await fetchRows(`SELECT table_name AS t, column_name AS c FROM information_schema.columns
+      WHERE table_schema = ${live.pg ? 'current_schema()' : 'DATABASE()'} AND table_name IN (${list})`);
+    const cols = {};
+    (r || []).forEach(x => {
+      const t = strv(val(x, 't')).toLowerCase(), c = strv(val(x, 'c')).toLowerCase();
+      if (t && c) (cols[t] = cols[t] || new Set()).add(c);
+    });
+    live.cols = cols;
+    live.probed = !!(r && r.length);
+  }
+  // probe ไม่ได้ → ถือว่ามีคอลัมน์มาตรฐาน แล้วให้ข้อความ error ของ SQL บอกเอง
+  const has = (t, c) => !live.probed ? true : !!(live.cols[t] && live.cols[t].has(c));
+  const hasTable = t => !live.probed ? true : !!live.cols[t];
+  const hospitalName = () => (live.user && (live.user.location || live.user.name)) || 'เชื่อมต่อแล้ว';
+
+  async function connect(sid) {
+    setStatus('warn', 'กำลังเชื่อมต่อ…');
+    overlayInfo('กำลังเชื่อมต่อ…', 'กำลังตรวจสอบ session และฐานข้อมูล');
+    const data = await fetchJson(proxied(`${PASTEJSON_URL}?Action=GET&code=${encodeURIComponent(sid)}`));
+    if (data.MessageCode !== 200) {
+      const msg = data.network ? explain(data) : data.nonJson ? `hosxp.net ตอบกลับผิดรูปแบบ (HTTP ${data.MessageCode})` : `Session ใช้ไม่ได้: ${data.Message || data.MessageCode}`;
+      setStatus('err', 'เชื่อมต่อไม่ได้'); overlayErr('เชื่อมต่อไม่สำเร็จ', msg); return;
+    }
+    const c = extractConn(data);
+    if (!c.apiUrl || !c.authKey) {
+      setStatus('err', 'Session ไม่มีข้อมูล API');
+      overlayErr('Session ไม่สมบูรณ์', 'Session ถูกต้องแต่ไม่มี api_url / auth key สำหรับ /api/sql'); return;
+    }
+    live.conn = { apiUrl: c.apiUrl, authKey: c.authKey }; live.user = c.user; live.types = new Map();
+    saveSid(sid);
+    const v = await sql('SELECT version() AS v');
+    if (!okRes(v)) { live.conn = null; setStatus('err', 'ส่ง SQL ไม่ผ่าน'); overlayErr('เชื่อมต่อฐานข้อมูลไม่ได้', explain(v)); return; }
+    const ver = strv(v.data[0] && val(v.data[0], 'v'));
+    live.pg = ver ? /postgre/i.test(ver) : /postgre/i.test(strv(live.user.bms_database_type));
+    live.engine = (live.pg ? 'PostgreSQL ' : 'MySQL ') + ((ver.match(/\d+\.\d+/) || [''])[0]);
+    await probeSchema();
+    if (!hasTable(BQ)) {
+      live.conn = null; setStatus('err', 'ไม่มีตารางคิวเจาะเลือด');
+      overlayErr('ฐานข้อมูลไม่รองรับ', 'ฐานนี้ไม่มีตาราง lab_blood_queue — โรงพยาบาลนี้อาจยังไม่ได้เปิดใช้ระบบคิวเจาะเลือดของ HOSxP'); return;
+    }
+    const miss = ['lab_blood_queue_id', 'lab_blood_queue_date'].filter(col => !has(BQ, col));
+    if (miss.length) {
+      live.conn = null; setStatus('err', 'โครงสร้างตารางไม่ครบ');
+      overlayErr('ฐานข้อมูลไม่รองรับ', 'ฐานนี้ไม่มี lab_blood_queue.' + miss.join(', lab_blood_queue.')); return;
+    }
+    hideOverlay();
+    goLive();
+    await loadLive();
+  }
+  function sessionLost() {
+    if (!live.conn) return;
+    live.conn = null; clearTimeout(live.timer);
+    forgetSid();
+    setStatus('err', 'Session หมดอายุ');
+    overlayErr('Session หมดอายุ', 'Session ถูกยกเลิกหรือหมดเวลา — วาง session ID ใหม่เพื่อแสดงผลต่อ');
+  }
+
+  /* ---- ดึงข้อมูล ---- */
+  async function loadTypes() {
+    if (live.types.size) return live.types;
+    const m = new Map();
+    if (hasTable(BQT) && has(BQT, 'lab_blood_queue_type_id')) {
+      const nm = has(BQT, 'lab_blood_queue_type_name') ? 'lab_blood_queue_type_name' : 'NULL';
+      const px = has(BQT, 'lab_blood_queue_type_prefix') ? 'lab_blood_queue_type_prefix' : 'NULL';
+      (await fetchRows(`SELECT lab_blood_queue_type_id AS i, ${nm} AS n, ${px} AS p FROM ${BQT} ORDER BY lab_blood_queue_type_id`) || [])
+        .forEach(r => m.set(strv(val(r, 'i')), { name: strv(val(r, 'n')), prefix: strv(val(r, 'p')) }));
+    }
+    live.types = m;
+    buildMapList();
+    return m;
+  }
+  // หนึ่งแถว = หนึ่งใบคิว · ไม่ดึง HN/ชื่อคนไข้ (ฉากนี้ไม่แสดงตัวตนคนไข้)
+  function queueSql(day, cur) {
+    const c = (col, as) => has(BQ, col) ? `${col} AS ${as}` : `NULL AS ${as}`;
+    return `SELECT lab_blood_queue_id AS i, ${c('lab_blood_queue_ref', 'r')}, ${c('lab_blood_queue_no', 'n')},
+      ${c('lab_blood_queue_type_id', 'ty')}, ${c('lab_blood_queue_time', 't')}, ${c('lab_blood_queue_complete', 'cp')},
+      ${c('call_status', 'cs')}, ${c('call_slot_number', 'sl')}, ${c('call_datetime', 'cd')}, ${c('vn', 'vn')}
+      FROM ${BQ} WHERE lab_blood_queue_date = ${sq(day)} ${cur != null ? `AND lab_blood_queue_id > ${Number(cur)}` : ''}
+      ORDER BY lab_blood_queue_id LIMIT ${PAGE_SIZE}`;
+  }
+  // การรับ Lab ของ visit ที่มีบัตรคิววันนี้: มีใบสั่งกี่ใบ · ห้องแล็บรับแล้วกี่ใบ · เวลารับครั้งแรก
+  function labSql(day, cur) {
+    return `SELECT h.vn AS vn, count(*) AS heads, sum(case when h.lab_receive = 'Y' then 1 else 0 end) AS rec,
+      min(case when h.lab_receive = 'Y' then h.receive_time end) AS rt
+      FROM lab_head h WHERE h.order_date = ${sq(day)}
+      AND h.vn IN (SELECT vn FROM ${BQ} WHERE lab_blood_queue_date = ${sq(day)})
+      ${cur != null ? `AND h.vn > ${sq(cur)}` : ''}
+      GROUP BY h.vn ORDER BY h.vn LIMIT ${PAGE_SIZE}`;
+  }
+  const labReady = () => live.opt.useLab && has(BQ, 'vn') && hasTable('lab_head')
+    && ['vn', 'order_date', 'lab_receive', 'receive_time'].every(c => has('lab_head', c));
+
+  /* บัตรคิวหนึ่งใบอาจมีหลายแถว: คนไข้ที่มีหลาย visit ในวันเดียวได้เลขคิวเดียว (ref เดียว คนละ vn)
+     — พบจริงที่ ppbh_hosxp วันละ 3–10 ใบ จึงรวมแถวที่ ref + ประเภทตรงกันเป็นคิวเดียว */
+  function normalize(raw, lab, labOk) {
+    const groups = new Map();
+    raw.forEach(r => {
+      const ref = strv(val(r, 'r')), k = ref ? ref + '|' + strv(val(r, 'ty')) : '#' + val(r, 'i');
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    });
+    return [...groups.entries()].map(([key, g]) => {
+      const r = g[0];
+      const id = Number(val(r, 'i')), ty = strv(val(r, 'ty')), T = live.types.get(ty);
+      const ref = strv(val(r, 'r')), no = strv(val(r, 'n'));
+      let heads = 0, rec = 0, rt = null;
+      g.forEach(x => {
+        const v = lab.get(strv(val(x, 'vn')));
+        if (!v) return;
+        heads += v.heads; rec += v.rec;
+        if (v.rt != null && (rt == null || v.rt < rt)) rt = v.rt;
+      });
+      const cd = g.map(x => strv(val(x, 'cd'))).find(Boolean) || '', cm = cd ? parseMin(cd) : null;
+      const complete = g.some(x => flag(val(x, 'cp'))), labDone = labOk && rec > 0;
+      const done = complete || labDone;
+      // เรียกคิวแล้ว: มีเวลาเรียก หรือ call_status = Y (ค่าอื่นของ call_status ยังไม่เคยเห็นในฐานจริง)
+      const called = !!cd || g.some(x => flag(val(x, 'cs')));
+      return {
+        key, id, ty, agent: null,
+        label: ref || (no ? (T && T.prefix ? T.prefix : '') + no.padStart(3, '0') : '#' + id),
+        typeName: T && T.name ? T.name : (ty ? 'ประเภท ' + ty : 'ไม่ระบุประเภท'),
+        prefix: T && T.prefix ? T.prefix : '',
+        qm: parseMin(val(r, 't')),
+        st: done ? 'done' : called ? 'call' : 'wait',
+        dm: labDone ? rt : (complete ? cm : null),
+        slot: g.map(x => strv(val(x, 'sl'))).find(Boolean) || '',
+        noOrder: labOk && !done && !heads,
+      };
+    });
+  }
+
+  async function loadLive(silent) {
+    if (live.busy || !live.conn) return;
+    live.busy = true;
+    if (!silent) setStatus('warn', 'กำลังดึงคิวเจาะเลือด…');
+    const today = ymdOf(todayNum());
+    try {
+      if (live.day && live.day !== today) { live.map.clear(); clearScene(); live.first = true; }  // ข้ามวัน เริ่มใหม่
+      live.day = today;
+      await loadTypes();
+      const raw = await keyset(cur => queueSql(today, cur), r => Number(val(r, 'i')), 'คิวเจาะเลือด (lab_blood_queue)');
+      const lab = new Map();
+      let labOk = false, labErr = '';
+      if (labReady() && raw.length) {
+        try {
+          const lr = await keyset(cur => labSql(today, cur), r => strv(val(r, 'vn')) || null, 'การรับ Lab (lab_head)');
+          lr.forEach(r => lab.set(strv(val(r, 'vn')), { heads: Number(val(r, 'heads')) || 0, rec: Number(val(r, 'rec')) || 0, rt: parseMin(val(r, 'rt')) }));
+          labOk = true;
+        } catch (e) { labErr = e.message; }
+      }
+      if (!live.conn) return;
+      live.labOk = labOk; live.labErr = labErr;
+      applyRows(normalize(raw, lab, labOk), live.first);
+      live.first = false;
+      live.loadedAt = new Date();
+      computeStats();
+      setStatus('ok', hospitalName());
+      showSrc();
+    } catch (e) {
+      if (live.conn) { setStatus('err', 'ดึงข้อมูลไม่สำเร็จ'); showSrc(e.message); }
+    } finally {
+      live.busy = false;
+      if (live.on && live.conn) {
+        clearTimeout(live.timer);
+        live.timer = setTimeout(() => loadLive(true), Math.max(10, live.opt.sec) * 1000);
+      }
+    }
+  }
+
+  /* ---- ข้อมูลจริง → ตัวละครในฉาก ---- */
+  function kindOf(rec) {
+    const m = live.opt.kinds[rec.ty];
+    if (m === 'gen' || m === 'wheel' || m === 'stretch') return m;
+    const n = rec.typeName + ' ' + rec.prefix;
+    const w = /รถนั่ง|wheel|chair/i.test(n), s = /รถนอน|เปล|stretch|cart/i.test(n);
+    if (w && s) return rec.id % 3 === 0 ? 'stretch' : 'wheel';   // ประเภทรวม "รถนั่ง/รถนอน"
+    if (s) return 'stretch';
+    if (w) return 'wheel';
+    return 'gen';
+  }
+  function clearScene() {
+    for (let i = agents.length - 1; i >= 0; i--) {
+      const a = agents[i];
+      if (a.seat) a.seat.occ = null;
+      if (a.spot) a.spot.occ = null;
+      if (a.eseat) a.eseat.occ = null;
+      if (a.espot) a.espot.occ = null;
+      if (a.rec) a.rec.agent = null;
+      scene.remove(a.root);
+      if (a.label) { a.label.material.map.dispose(); a.label.material.dispose(); }
+      agents.splice(i, 1);
+    }
+    genQueue.length = 0; priQueue.length = 0; callLog.length = 0;
+    tables.forEach(T => { T.state = 'idle'; T.agent = null; T.ticket = null; T.prog = 0; T.t = 0; });
+    doneCount = 0; examDone = 0; live.extra = 0;
+    live.closed.clear();
+    dirty();
+  }
+  // วางคนที่นั่งรออยู่แล้วตอนเปิดจอ (ไม่ต้องเดินเข้าใหม่)
+  function seedLive(kind, rec) {
+    let a;
+    if (kind === 'gen') {
+      const s = pickSeat(); if (!s) return null;
+      a = createAgent('gen'); s.occ = a; a.seat = s;
+      a.root.position.set(s.x, 0, s.z); a.sit = a.sitTarget = 1;
+    } else {
+      const s = spots.find(p => !p.occ); if (!s) return null;
+      a = createAgent(kind); s.occ = a; a.spot = s;
+      a.root.position.set(s.x, 0, s.z);
+    }
+    a.rec = rec; rec.agent = a;
+    a.heading = a.targetHeading = Math.PI;
+    issueTicket(a, rec.label); a.labelPop = 1; a.label.scale.set(0.9, 0.45, 1);
+    a.state = 'waiting';
+    dirty();
+    return a;
+  }
+  function spawnLive(rec, seated) {
+    if (agents.length >= MAX_AGENTS) { live.extra++; return null; }
+    const a = seated ? seedLive(rec.kind, rec) : spawn(rec.kind, false, rec);
+    if (!a) live.extra++;      // ที่นั่ง/จุดรอในฉากเต็ม — นับไว้บอกบนป้าย ไม่ได้ทิ้งข้อมูล
+    return a;
+  }
+  function markReady(a) {
+    if (!a || a.ready) return;
+    a.ready = true;
+    enqueue(a);          // นั่งรออยู่แล้ว → เข้าคิวเรียกทันที · ยังเดินอยู่ → เข้าคิวเมื่อถึงที่นั่ง
+    dirty();
+  }
+  // บัตรคิวหายจากฐาน (ถูกลบ/ข้ามวัน) → ให้เดินออกจากฉาก
+  function sendOut(a) {
+    if (!a) return;
+    if (a.rec) { a.rec.agent = null; a.rec = null; }
+    if (a.state === 'waiting' || a.state === 'toWait') {
+      unqueue(a);
+      if (a.seat) { a.seat.occ = null; a.seat = null; }
+      if (a.spot) { a.spot.occ = null; a.spot = null; }
+      a.path = null; a.waitFn = null;
+      goDoor(a);
+    }
+  }
+  function applyRows(list, first) {
+    const seen = new Set();
+    live.extra = 0;
+    for (const rec of list) {
+      seen.add(rec.key);
+      rec.kind = kindOf(rec);
+      const old = live.map.get(rec.key);
+      if (old && old.agent) { rec.agent = old.agent; rec.agent.rec = rec; }
+      live.map.set(rec.key, rec);
+      const ready = rec.st === 'done' || rec.st === 'call';
+      if (rec.agent) { if (ready) markReady(rec.agent); continue; }
+      // เจาะเสร็จก่อนเปิดจอ หรือเดินออกจากฉากไปแล้ว — อย่าให้เดินเข้ามาใหม่ทุกครั้งที่รีเฟรช
+      if (live.closed.has(rec.key)) continue;
+      if (first && rec.st === 'done') { live.closed.add(rec.key); continue; }
+      const a = spawnLive(rec, first);
+      if (a && ready) markReady(a);
+    }
+    for (const [k, rec] of [...live.map]) {
+      if (seen.has(k)) continue;
+      sendOut(rec.agent);
+      live.map.delete(k);
+    }
+  }
+  function computeStats() {
+    const now = realMin();
+    let total = 0, wait = 0, waitGen = 0, waitPri = 0, done = 0, called = 0, noOrder = 0, longest = null;
+    for (const rec of live.map.values()) {
+      total++;
+      if (rec.st === 'done') { done++; continue; }
+      wait++;
+      if (rec.st === 'call') called++;
+      if (rec.noOrder) noOrder++;
+      if (rec.kind === 'gen') waitGen++; else waitPri++;
+      if (rec.qm != null) { const w = Math.max(0, now - rec.qm); if (longest == null || w > longest) longest = w; }
+    }
+    live.stats = { total, wait, waitGen, waitPri, done, called, noOrder, longest };
+  }
+
+  /* ---- UI ของโหมดข้อมูลจริง ---- */
+  function setStatus(kind, text) {
+    const p = $('statusPill');
+    p.className = 'pill' + (kind ? ' ' + kind : '');
+    $('statusText').textContent = text;
+    p.title = text;
+  }
+  function showOverlay() { $('overlay').hidden = false; $('ovSid').focus(); }
+  function hideOverlay() { $('overlay').hidden = true; }
+  function overlayInfo(title, msg) {
+    $('overlay').hidden = false;
+    $('ovTitle').textContent = title; $('ovMsg').textContent = msg; $('ovMsg').className = '';
+  }
+  function overlayErr(title, msg) {
+    $('overlay').hidden = false;
+    $('ovTitle').textContent = title; $('ovMsg').textContent = msg; $('ovMsg').className = 'err';
+  }
+  function showSrc(err) {
+    const el = $('srcLine');
+    if (!live.on) { el.hidden = true; return; }
+    const t = live.loadedAt ? live.loadedAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '–';
+    const s = live.stats || { total: 0, done: 0, noOrder: 0 };
+    const parts = [`${hospitalName()} • ${live.engine}`, `บัตรคิววันนี้ ${s.total} ใบ · ห้องแล็บรับแล้ว ${s.done} ใบ · อัปเดต ${t}`];
+    if (live.extra > 0) parts.push(`คนรอเกินที่นั่งในฉาก ${live.extra} ราย (ไม่ได้แสดงตัว)`);
+    if (s.noOrder) parts.push(`ยังไม่มีใบสั่ง Lab ${s.noOrder} ราย`);
+    if (!live.labOk) parts.push(live.opt.useLab ? ('ดูการรับ Lab ไม่ได้' + (live.labErr ? ': ' + live.labErr : '')) : 'ปิดการดูการรับ Lab อยู่');
+    if (err) parts.push('⚠ ' + err);
+    el.innerHTML = parts.map(x => `<span>${x}</span>`).join('<br>');
+    el.hidden = false;
+  }
+  function loadOpt() {
+    try {
+      const o = JSON.parse(localStorage.getItem(LS_OPT) || '{}');
+      if (o && typeof o === 'object') {
+        if (Number(o.sec) >= 10) live.opt.sec = Number(o.sec);
+        if (typeof o.useLab === 'boolean') live.opt.useLab = o.useLab;
+        if (o.kinds && typeof o.kinds === 'object') live.opt.kinds = o.kinds;
+      }
+    } catch (e) {}
+  }
+  function saveOpt() { try { localStorage.setItem(LS_OPT, JSON.stringify(live.opt)); } catch (e) {} }
+  function buildMapList() {
+    const ul = $('mapList');
+    const ids = [...live.types.keys()];
+    if (!ids.length) { ul.innerHTML = '<li><small style="color:#6a8296">ยังไม่ทราบประเภทคิว (ต่อ HOSxP ก่อน)</small></li>'; return; }
+    ul.innerHTML = ids.map(id => {
+      const t = live.types.get(id), cur = live.opt.kinds[id] || 'auto';
+      const opt = (v, label) => `<option value="${v}"${cur === v ? ' selected' : ''}>${label}</option>`;
+      return `<li><span>${t.name || 'ประเภท ' + id}${t.prefix ? ' (' + t.prefix + ')' : ''}</span>
+        <select data-ty="${id}">${opt('auto', 'อัตโนมัติ')}${opt('gen', 'เดินเอง')}${opt('wheel', 'รถนั่ง')}${opt('stretch', 'รถนอน')}</select></li>`;
+    }).join('');
+  }
+  function goLive() {
+    live.on = true; live.first = true; live.map.clear();
+    clearScene();
+    $('addRow').hidden = true;
+    $('btnRefresh').hidden = false;
+    $('btnConn').textContent = '⚙ ตั้งค่า';
+    $('logHead').textContent = 'คิวที่เข้าเจาะเลือดล่าสุด';
+    $('lDone').textContent = 'ห้องแล็บรับแล้ว';
+    $('lExam').textContent = 'รอนานสุด';
+    setPlaying(true);
+  }
+  function goDemo(msg) {
+    live.on = false; live.conn = null; clearTimeout(live.timer);
+    live.map.clear(); live.stats = null;
+    clearScene(); seedDemo();
+    $('addRow').hidden = false;
+    $('btnRefresh').hidden = true;
+    $('btnConn').textContent = 'เชื่อมต่อ HOSxP';
+    $('logHead').textContent = 'ประกาศเรียกคิวล่าสุด';
+    $('lDone').textContent = 'เจาะเลือดเสร็จ';
+    $('lExam').textContent = 'เข้าห้องตรวจแล้ว';
+    $('srcLine').hidden = true;
+    setStatus('demo', 'โหมดจำลอง');
+    if (msg) toast(msg);
+  }
+
+  /* ---------------- per-frame agent update ---------------- */
+  function updateAgent(a, dt) {
+    if (a.waitFn) { a.waitT -= dt; if (a.waitT <= 0) { const f = a.waitFn; a.waitFn = null; f(); } }
+    let moved = 0;
+    if (a.path) {
+      const P = a.path;
+      P.t += dt;
+      const d = trapezoid(P.t, P.dur, P.ta) * P.len;
+      let i = 0;
+      while (i < P.pts.length - 2 && P.cum[i + 1] < d) i++;
+      const A = P.pts[i], B = P.pts[i + 1], segL = P.cum[i + 1] - P.cum[i];
+      const f = segL > 0 ? clamp((d - P.cum[i]) / segL, 0, 1) : 1;
+      const nx = A.x + (B.x - A.x) * f, nz = A.z + (B.z - A.z) * f;
+      moved = Math.hypot(nx - a.root.position.x, nz - a.root.position.z);
+      a.root.position.x = nx; a.root.position.z = nz;
+      if (segL > 0.001) {
+        let h = Math.atan2(B.x - A.x, B.z - A.z);
+        if (P.faceEnd != null && i === P.pts.length - 2 && segL < 1.6) h = P.faceEnd;
+        a.targetHeading = h;
+      }
+      if (P.t >= P.dur) {
+        const cb = P.onDone; a.path = null;
+        if (P.faceEnd != null) a.targetHeading = P.faceEnd;
+        if (cb) cb();
+      }
+    }
+    a.speedNow = dt > 0 ? moved / dt : 0;
+    a.heading = angLerp(a.heading, a.targetHeading, 1 - Math.exp(-dt * (a.pri ? 5 : 9)));
+    a.root.rotation.y = a.heading;
+
+    const tw = clamp(a.speedNow / WALK * 1.2, 0, 1);
+    a.walk = lerp(a.walk, tw, 1 - Math.exp(-dt * 10));
+    a.phase += moved * Math.PI * 2 / 1.3;
+    const sd = a.sitTarget - a.sit;
+    a.sit += Math.sign(sd) * Math.min(Math.abs(sd), dt * 2.2);
+    const ad = a.armTarget - a.arm;
+    a.arm += Math.sign(ad) * Math.min(Math.abs(ad), dt * 2.5);
+
+    if (a.kind === 'gen') poseHuman(a.person, a.walk, a.phase, smooth(a.sit), smooth(a.arm));
+    else {
+      poseHuman(a.person, 0, 0, a.kind === 'wheel' ? 1 : 0, smooth(a.arm));
+      poseHuman(a.porter, a.walk, a.phase, 0, 0, true);
+      for (const w of a.wheels) w.g.rotation.x += moved / w.r;
+    }
+    if (a.label) {
+      if (a.labelPop >= 0 && a.labelPop < 1) {
+        a.labelPop = Math.min(1, a.labelPop + dt * 2.2);
+        const s = Math.max(0.001, easeOutBack(a.labelPop));
+        a.label.scale.set(0.9 * s, 0.45 * s, 1);
+      } else if (a.state === 'called') {
+        const s = 1 + 0.14 * Math.sin(simT * 9);
+        a.label.scale.set(0.9 * s, 0.45 * s, 1);
+      } else a.label.scale.set(0.9, 0.45, 1);
+    }
+  }
+
+  function updateTables(dt) {
+    for (const T of tables) {
+      if (T.state === 'drawing') {
+        const a = T.agent;
+        if (a.arm > 0.8 || a.kind === 'stretch') T.t += dt;
+        T.prog = clamp(T.t / T.dur, 0, 1);
+        if (T.t >= T.dur) finishDraw(T);
+      }
+      const shown = T.state === 'drawing' ? T.prog : (T.state === 'done' ? 1 : 0);
+      T.bar.scale.x = Math.max(0.001, shown);
+      T.fill.scale.y = Math.max(0.01, shown);
+      const col = lampCols[T.state];
+      T.lampMat.color.setHex(col); T.lampMat.emissive.setHex(col);
+      T.lampMat.emissiveIntensity = T.state === 'calling' ? (Math.sin(simT * 10) > 0 ? 2.2 : 0.3) : 1.2;
+      // nurse animation
+      poseHuman(T.nurse, 0, 0, 1);
+      if (T.state === 'drawing') {
+        T.nurse.arms[1].rotation.x = -1.25 + 0.12 * Math.sin(simT * 4 + T.n);
+        T.nurse.arms[0].rotation.x = -1.0 + 0.06 * Math.sin(simT * 3);
+        T.nurse.hips.rotation.x = 0.12;
+      } else if (T.state === 'calling') {
+        T.nurse.arms[1].rotation.x = -0.9 + 0.25 * Math.sin(simT * 6);
+        T.nurse.hips.rotation.x = 0;
+      } else T.nurse.hips.rotation.x = 0;
+      const key = T.state + '|' + T.ticket;
+      if (key !== T.signKey) { T.signKey = key; drawTableSign(T); }
+    }
+  }
+
+  function updateWorld(dt) {
+    for (const k of [kioskA, kioskB]) {
+      k.press = Math.max(0, k.press - dt * 0.7);
+      k.screenMat.emissiveIntensity = 0.6 + k.press * 1.4;
+      k.paper.visible = k.press > 0.12;
+      k.paper.scale.y = clamp((1 - k.press) * 2.5, 0.05, 1);
+    }
+    for (const d of doors) {
+      const near = agents.some(a => (a.state === 'toDoor') && Math.hypot(a.root.position.x - d.x, a.root.position.z + 8.2) < 2.6);
+      d.open = lerp(d.open, near ? 1 : 0, 1 - Math.exp(-dt * 4));
+      d.pivot.rotation.y = -d.open * 1.35;
+    }
+    const m = sceneMin();
+    mHand.rotation.z = -((m % 60) / 60) * Math.PI * 2;
+    hHand.rotation.z = -(((m / 60) % 12) / 12) * Math.PI * 2;
+  }
+
+  // โหมดข้อมูลจริงใช้เวลานาฬิกาจริง · โหมดจำลองเดินเวลาเร็วกว่าจริงจาก 08:00
+  function sceneMin() {
+    if (live.on) { const n = new Date(); return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60; }
+    return 8 * 60 + simT * 0.5;
+  }
+  function clockStr() {
+    const m = sceneMin();
+    const hh = Math.floor(m / 60) % 24, mm = Math.floor(m % 60);
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} น.`;
+  }
+
+  function step(dt) {
+    const prevC = simT % CYCLE;
+    simT += dt;
+    const nowC = simT % CYCLE;
+    if (!live.on) for (const ev of EVENTS) {     // โหมดข้อมูลจริง: คนไข้มาจากฐาน ไม่สุ่มเพิ่มเอง
+      const hit = prevC <= nowC ? (ev.t > prevC && ev.t <= nowC) : (ev.t > prevC || ev.t <= nowC);
+      if (hit) spawn(ev.k, false);
+    }
+    for (let i = agents.length - 1; i >= 0; i--) { const a = agents[i]; if (a) updateAgent(a, dt); }
+    dispatch();
+    updateTables(dt);
+    updateWorld(dt);
+  }
+
+  /* ---------------- board + HTML UI ---------------- */
+  function drawBoard() {
+    const g = bctx, W = 1024, H = 448;
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#133857'); grd.addColorStop(1, '#0a1f33');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    g.textBaseline = 'middle';
+    g.fillStyle = '#fff'; g.textAlign = 'left'; g.font = `bold 36px ${FONT}`;
+    g.fillText(live.on ? 'ห้องเจาะเลือด • คิวจริงจาก HOSxP' : 'ห้องเจาะเลือด • หมายเลขคิวที่เรียก', 28, 40);
+    g.textAlign = 'right'; g.font = `28px ${FONT}`; g.fillStyle = '#9fd0ff';
+    g.fillText('เวลา ' + clockStr(), W - 28, 40);
+    const gap = 12, cw = (W - 56 - gap * 4) / 5;
+    tables.forEach((T, i) => {
+      const x = 28 + i * (cw + gap), y = 78, h = 270;
+      const calling = T.state === 'calling', blink = calling && Math.floor(simT * 3) % 2 === 0;
+      rr(g, x, y, cw, h, 16); g.fillStyle = blink ? '#6b4d12' : '#183f62'; g.fill();
+      rr(g, x, y, cw, 64, 16); g.fillStyle = T.priority ? '#f08a24' : '#2f7fe0'; g.fill();
+      g.fillRect(x, y + 44, cw, 20);
+      g.fillStyle = '#fff'; g.textAlign = 'center';
+      g.font = `bold 30px ${FONT}`; g.fillText(`โต๊ะ ${T.n}`, x + cw / 2, y + 24);
+      g.font = `18px ${FONT}`; g.fillText(T.priority ? 'รถนั่ง / รถนอน' : 'ทั่วไป', x + cw / 2, y + 51);
+      const idle = T.state === 'idle' || T.state === 'done';
+      g.font = `bold 62px ${FONT}`;
+      g.fillStyle = idle ? '#7f97ad' : (calling ? '#ffd166' : '#ffffff');
+      g.fillText(T.ticket || '—', x + cw / 2, y + 138, cw - 16);
+      const st = { idle: 'ว่าง', done: 'เสร็จแล้ว', calling: 'กำลังเรียก', drawing: 'กำลังเจาะเลือด' }[T.state];
+      const sc = { idle: '#2ecc71', done: '#4aa3ff', calling: '#ffb020', drawing: '#ff4757' }[T.state];
+      rr(g, x + 14, y + 186, cw - 28, 38, 19); g.fillStyle = sc; g.fill();
+      g.fillStyle = '#fff'; g.font = `bold 20px ${FONT}`; g.fillText(st, x + cw / 2, y + 206, cw - 36);
+      rr(g, x + 14, y + 238, cw - 28, 12, 6); g.fillStyle = 'rgba(255,255,255,.15)'; g.fill();
+      const pr = T.state === 'drawing' ? T.prog : (T.state === 'done' ? 1 : 0);
+      if (pr > 0.01) { rr(g, x + 14, y + 238, Math.max(12, (cw - 28) * pr), 12, 6); g.fillStyle = '#ff6b78'; g.fill(); }
+    });
+    g.textAlign = 'center'; g.font = `26px ${FONT}`; g.fillStyle = '#cfe6ff';
+    let foot;
+    if (live.on && live.stats) {
+      const s = live.stats;
+      foot = `รอเจาะ ${s.wait} ราย (ทั่วไป ${s.waitGen} • รถนั่ง/รถนอน ${s.waitPri})  •  ห้องแล็บรับแล้ว ${s.done} / ${s.total} บัตรคิววันนี้`;
+      if (live.extra > 0) foot += `  •  +${live.extra} ไม่ได้แสดงในฉาก`;
+    } else {
+      foot = `รอคิว ทั่วไป ${genQueue.length} ราย  •  รถนั่ง/รถนอน ${priQueue.length} ราย  •  เจาะเลือดเสร็จแล้ว ${doneCount} ราย`;
+    }
+    g.fillText(foot, W / 2, 396, W - 40);
+    boardTex.needsUpdate = true;
+  }
+
+  const tbl = $('tbl');
+  const rows = tables.map(T => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>โต๊ะ ${T.n}</b><small>${T.priority ? 'รถนั่ง/รถนอน' : 'ทั่วไป'}</small></td><td class="q"></td><td class="s"></td>`;
+    tbl.appendChild(tr);
+    return { q: tr.children[1], s: tr.children[2] };
+  });
+  function updateUI() {
+    tables.forEach((T, i) => {
+      const r = rows[i], idle = T.state === 'idle' || T.state === 'done';
+      r.q.textContent = T.ticket || '—';
+      r.q.className = 'q ' + (idle ? 'dim' : (T.priority ? 'p' : 'a'));
+      let html;
+      if (T.state === 'idle') html = '<span class="st idle">ว่าง</span>';
+      else if (T.state === 'calling') html = '<span class="st call">กำลังเรียก</span>';
+      else if (T.state === 'drawing') html = `<span class="st busy">กำลังเจาะ ${Math.round(T.prog * 100)}%</span>`;
+      else html = '<span class="st done">เสร็จแล้ว</span>';
+      if (r.s.innerHTML !== html) r.s.innerHTML = html;
+    });
+    if (live.on) {
+      computeStats();                      // เวลารอเดินต่อเองระหว่างรอรีเฟรชรอบถัดไป
+      const s = live.stats;
+      $('sGen').textContent = s.waitGen;
+      $('sPri').textContent = s.waitPri;
+      $('sDone').textContent = s.done;
+      $('sExam').textContent = s.longest == null ? '–' : s.longest + ' น.';
+    } else {
+      $('sGen').textContent = genQueue.length;
+      $('sPri').textContent = priQueue.length;
+      $('sDone').textContent = doneCount;
+      $('sExam').textContent = examDone;
+    }
+    if (uiDirty) {
+      $('log').innerHTML = callLog.map(c => `<li><b class="${c.pri ? 'p' : 'a'}">${c.ticket}</b> → โต๊ะ ${c.table}<span>${c.time}</span></li>`).join('') || '<li>ยังไม่มีการเรียกคิว</li>';
+      uiDirty = false;
+    }
+    let c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+    for (const a of agents) {
+      if (a.state === 'arrive' || a.state === 'ticket') c1++;
+      else if (a.state === 'toWait' || a.state === 'waiting') c2++;
+      else if (a.state === 'called' || a.state === 'drawing' || a.state === 'doneDraw') c3++;
+      else c4++;
+    }
+    $('c1').textContent = c1; $('c2').textContent = c2; $('c3').textContent = c3; $('c4').textContent = c4;
+  }
+
+  let capTimer = null;
+  function announce(text, pri) {
+    const el = $('caption');
+    el.textContent = text;
+    el.classList.toggle('pri', !!pri);
+    el.classList.add('show');
+    clearTimeout(capTimer);
+    capTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    dirty();
+  }
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  /* ---------------- camera controls ---------------- */
+  const R_MIN = 10, R_MAX = 70;
+  const target = new THREE.Vector3(-1, 0.6, 1.2);
+  function defaultView() {
+    const aspect = innerWidth / innerHeight;
+    return { theta: 0.38, phi: 0.92, r: aspect < 0.8 ? 56 : (aspect < 1.3 ? 44 : 34) };
+  }
+  let goal = defaultView();
+  const cur = { theta: goal.theta + 0.5, phi: 0.7, r: goal.r + 18 };
+  function resetView() { goal = defaultView(); }
+
+  const pointers = new Map();
+  let pinchDist = 0;
+  const pDist = () => { const p = [...pointers.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) pinchDist = pDist();
+    canvas.classList.add('drag');
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 1) {
+      goal.theta -= dx * 0.005;
+      goal.phi = clamp(goal.phi - dy * 0.004, 0.25, 1.38);
+    } else if (pointers.size === 2) {
+      const d = pDist();
+      if (pinchDist > 0 && d > 0) goal.r = clamp(goal.r * pinchDist / d, R_MIN, R_MAX);
+      pinchDist = d;
+    }
+  });
+  const endPtr = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchDist = 0;
+    if (!pointers.size) canvas.classList.remove('drag');
+  };
+  canvas.addEventListener('pointerup', endPtr);
+  canvas.addEventListener('pointercancel', endPtr);
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    goal.r = clamp(goal.r * Math.exp(e.deltaY * 0.0012), R_MIN, R_MAX);
+  }, { passive: false });
+  canvas.addEventListener('dblclick', resetView);
+
+  function updateCamera(rdt) {
+    const k = 1 - Math.exp(-rdt * 4);
+    cur.theta = lerp(cur.theta, goal.theta, k);
+    cur.phi = lerp(cur.phi, goal.phi, k);
+    cur.r = lerp(cur.r, goal.r, 1 - Math.exp(-rdt * 2.5));
+    // slow choreographed camera drift tied to the looping timeline
+    const ph = (simT / CYCLE) * Math.PI * 2;
+    const th = cur.theta + 0.2 * Math.sin(ph);
+    const pp = clamp(cur.phi + 0.04 * Math.sin(ph * 2), 0.2, 1.42);
+    const r = cur.r * (1 + 0.04 * Math.sin(ph + 1.2));
+    camera.position.set(
+      target.x + r * Math.sin(pp) * Math.sin(th),
+      target.y + r * Math.cos(pp),
+      target.z + r * Math.sin(pp) * Math.cos(th)
+    );
+    camera.lookAt(target);
+  }
+
+  /* ---------------- UI wiring ---------------- */
+  const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let playing = !reduceMotion;
+  let speed = 1;
+  const playBtn = $('play'), prompt = $('prompt');
+  function setPlaying(v) {
+    playing = v;
+    playBtn.textContent = v ? '⏸ หยุดชั่วคราว' : '▶ เล่น';
+    playBtn.setAttribute('aria-pressed', String(!v));
+    if (v) prompt.hidden = true;
+  }
+  setPlaying(playing);
+  if (reduceMotion) prompt.hidden = false;
+  prompt.addEventListener('click', () => setPlaying(true));
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  $('reset').addEventListener('click', resetView);
+  const speedIn = $('speed'), speedOut = $('speedOut');
+  speedIn.addEventListener('input', () => {
+    speed = parseFloat(speedIn.value);
+    speedOut.textContent = (Math.round(speed * 100) / 100) + '×';
+  });
+  $('addGen').addEventListener('click', () => spawn('gen', true));
+  $('addWheel').addEventListener('click', () => spawn('wheel', true));
+  $('addStretch').addEventListener('click', () => spawn('stretch', true));
+  document.querySelectorAll('button').forEach(b => b.addEventListener('mouseup', () => b.blur()));
+
+  /* ---- ปุ่มของโหมดข้อมูลจริง ---- */
+  $('btnConn').addEventListener('click', () => { if (live.on) openSheet(); else showOverlay(); });
+  $('btnRefresh').addEventListener('click', () => { if (live.conn) loadLive(); });
+  $('ovForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const sid = $('ovSid').value.trim();
+    if (sid) connect(sid); else $('ovSid').focus();
+  });
+  $('ovDemo').addEventListener('click', () => { hideOverlay(); if (live.on) goDemo('กลับไปใช้ข้อมูลจำลอง'); });
+  function openSheet() {
+    $('optSec').value = String(live.opt.sec);
+    $('optLab').checked = live.opt.useLab;
+    $('shInfo').textContent = live.on
+      ? `${hospitalName()} • ${live.engine} — ดึงจาก lab_blood_queue และการรับ Lab (lab_head) ของวันนี้`
+      : 'ยังไม่ได้เชื่อมต่อ HOSxP';
+    buildMapList();
+    $('sheet').hidden = false;
+  }
+  $('shClose').addEventListener('click', () => { $('sheet').hidden = true; });
+  $('shOff').addEventListener('click', () => { $('sheet').hidden = true; forgetSid(); goDemo('ตัดการเชื่อมต่อแล้ว'); });
+  $('shSave').addEventListener('click', () => {
+    live.opt.sec = Math.max(10, Number($('optSec').value) || 30);
+    const useLab = $('optLab').checked, changed = useLab !== live.opt.useLab;
+    live.opt.useLab = useLab;
+    const kinds = {};
+    $('mapList').querySelectorAll('select[data-ty]').forEach(s => { if (s.value !== 'auto') kinds[s.dataset.ty] = s.value; });
+    const remap = JSON.stringify(kinds) !== JSON.stringify(live.opt.kinds);
+    live.opt.kinds = kinds;
+    saveOpt();
+    $('sheet').hidden = true;
+    if (live.conn) {
+      if (changed || remap) { live.map.clear(); clearScene(); live.first = true; }   // ตีความใหม่ทั้งฉาก
+      loadLive();
+    }
+    toast('บันทึกการตั้งค่าแล้ว');
+  });
+  [$('overlay'), $('sheet')].forEach(m => m.addEventListener('click', (e) => {
+    if (e.target !== m) return;
+    if (m.id === 'sheet') m.hidden = true;
+    else if (live.on || live.conn) hideOverlay();
+  }));
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('sheet').hidden) $('sheet').hidden = true;
+    else if (!$('overlay').hidden && (live.on || live.conn)) hideOverlay();
+  });
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!e.repeat) setPlaying(!playing);
+    }
+  });
+  addEventListener('keyup', (e) => { if (e.code === 'Space') e.preventDefault(); });
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  /* ---------------- main loop ---------------- */
+  const clock = new THREE.Clock();
+  let uiTimer = 1;
+  tables.forEach(drawTableSign);
+  drawBoard(); updateUI();
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+
+  /* ---- เริ่มทำงาน: ?demo=1 = จำลองล้วน · มี session (URL หรือที่จำไว้) = ต่อ HOSxP ---- */
+  loadOpt();
+  setStatus('demo', 'โหมดจำลอง');
+  {
+    const qs = new URLSearchParams(location.search);
+    const demoOnly = qs.get('demo') === '1';
+    const urlSid = qs.get(SID_PARAM) || qs.get('sid') || '';
+    if (urlSid) {                       // หน้ารวมแอปส่ง session มาให้ทาง URL - อ่านแล้วลบออกจากแถบที่อยู่
+      qs.delete(SID_PARAM); qs.delete('sid');
+      history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : ''));
+    }
+    const sid = demoOnly ? '' : (urlSid || loadSid());
+    if (sid) connect(sid);
+    else if (!demoOnly) showOverlay();
+  }
+
+  renderer.setAnimationLoop(() => {
+    const rdt = Math.min(clock.getDelta(), 0.1);
+    if (playing) {
+      let dt = rdt * speed;
+      while (dt > 1e-6) { const s = Math.min(dt, 0.04); step(s); dt -= s; }
+    }
+    updateCamera(rdt);
+    uiTimer += rdt;
+    if (uiTimer > 0.2) { uiTimer = 0; drawBoard(); updateUI(); }
+    renderer.render(scene, camera);
+  });
+}
+</script>
+<script>
+/* ลิงก์กลับหน้ารวมแอปแสดงผล 3 มิติ (BMS-3D-Home พอร์ต 8805 ของเครื่องเดียวกับที่เปิดหน้านี้)
+   โผล่ให้เห็นเฉพาะตอนที่เครื่องนั้นเปิดหน้ารวมไว้จริง จะได้ไม่มีลิงก์ตายค้างบนจอ */
+(function(){
+  var a=document.getElementById('homeLnk'), b=document.getElementById('homeBtn'), row=document.getElementById('homeRow');
+  if(!a&&!b) return;
+  var host=location.protocol==='file:'?'localhost':(location.hostname||'localhost');
+  var url='http://'+host+':8805/index.html';
+  if(a) a.href=url;
+  if(b) b.onclick=function(){ location.href=url; };
+  var done=function(){ if(a) a.hidden=false; if(b) b.hidden=false; if(row) row.hidden=false; };
+  try{
+    var c=new AbortController(), t=setTimeout(function(){ c.abort(); },2500);
+    fetch(url,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:c.signal})
+      .then(done).catch(function(){}).then(function(){ clearTimeout(t); });
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

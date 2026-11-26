@@ -1,9 +1,6 @@
-# โฟลเดอร์ของแอปแต่ละตัววางไว้ในนี้เพื่อให้อยู่ที่เดียวกัน แต่เป็นของใครของมัน
-# (patient-journey-3d → github.com/bmsjib5-ux/patient-journey-3d) จึงไม่เอาเข้า repo ของหน้า home
-patient-journey-3d/
-Lab-visit-3D/
-doctor-queue-3d/
-er-triage-3d/
+# แอป 3 มิติทุกตัวอยู่ใน repo นี้ที่เดียว (รวมเข้ามา 26/11/2569 พร้อมประวัติ commit เดิมของแต่ละแอป)
+# ไฟล์ที่มี IP ภายในของโรงพยาบาลกันไว้ใน .gitignore ของแต่ละแอป เช่น patient-journey-3d/deploy/ และ u.ps1
+# ชุดติดตั้ง setup/*.zip เป็นไฟล์ที่สร้างขึ้นใหม่ได้ จึงไม่เก็บ
 
 # เครื่องมือ/ขยะของเครื่อง
 .claude/
