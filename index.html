@@ -67,7 +67,31 @@
   .stat span{font-size:10.5px;opacity:.75}
   .stat.warn b{color:#c2410c}
   #kpi{font-size:11.5px;opacity:.8;margin:0 0 6px;line-height:1.45}
-  #ptList{max-height:min(34vh,300px);overflow:auto;margin:0 -4px 8px;padding:0 4px;border-top:1px solid rgba(16,34,46,.08)}
+  .cum{background:#fbeeee;border-radius:9px;margin:0 0 6px}
+  .cumHead{display:flex;align-items:baseline;gap:6px;width:100%;background:none;color:inherit;padding:6px 9px;font-size:12.5px;border-radius:9px}
+  .cumHead:hover{background:#f6e2e2;filter:none}
+  .cumHead b{font-size:19px;font-variant-numeric:tabular-nums;color:#b42318}
+  .cumHead .sub{font-size:11px;opacity:.65}
+  .cumHead .chev{margin-left:auto;transition:transform .15s;opacity:.7}
+  .cumHead[aria-expanded="true"] .chev{transform:rotate(90deg)}
+  .cumBody{padding:0 9px 8px;font-size:12px;line-height:1.5}
+  .cumBody[hidden]{display:none}
+  .cr{display:flex;justify-content:space-between;gap:8px}
+  .cr b{font-variant-numeric:tabular-nums}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0 4px}
+  .chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border-radius:999px;padding:1px 7px 1px 4px;font-size:11.5px;font-variant-numeric:tabular-nums}
+  .chip .dot{width:10px;height:10px;margin:0}
+  .hours{display:flex;align-items:flex-end;gap:1px;height:34px;margin-top:6px}
+  .hours i{flex:1;background:#d64545;opacity:.75;border-radius:2px 2px 0 0;min-height:1px}
+  .hours i.now{opacity:1;background:#9b1c1c}
+  .hlab{display:flex;justify-content:space-between;font-size:10px;opacity:.6}
+  .cumNote{font-size:10.5px;opacity:.6;margin-top:4px}
+  /* แผงบนซ้ายสูงได้ไม่เกินขอบบนของกล่องสัญลักษณ์สี (fitTop) — ส่วนที่ยืดหดคือรายชื่อคนไข้ */
+  #top{display:flex;flex-direction:column;overflow-x:hidden;overflow-y:auto}
+  #top > *{flex:none}
+  #liveBox:not(.hidden){display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  #liveBox > *{flex:none}
+  #ptList{flex:1 1 auto!important;min-height:44px;max-height:min(34vh,300px);overflow:auto;margin:0 -4px 8px;padding:0 4px;border-top:1px solid rgba(16,34,46,.08)}
   .pt{display:grid;grid-template-columns:14px 1fr auto;gap:7px;align-items:center;width:100%;text-align:left;background:none;color:inherit;
     border-radius:7px;padding:5px 4px;font-size:12.5px;border-bottom:1px solid rgba(16,34,46,.05)}
   .pt:hover{background:#eef4f7;filter:none}
@@ -136,6 +160,12 @@
         <div class="stat" id="sTx"><b>0</b><span>กำลังรักษา</span></div>
         <div class="stat" id="sAdm"><b>0</b><span>รอขึ้นวอร์ด</span></div>
       </div>
+      <div class="cum">
+        <button id="cumHead" class="cumHead" aria-expanded="false" aria-controls="cumBody" title="ดูรายละเอียด">
+          <span>คนไข้ห้อง ER สะสมวันนี้</span><b id="cumN">–</b><span>คน</span><span class="sub" id="cumSub"></span><span class="chev">▸</span>
+        </button>
+        <div id="cumBody" class="cumBody" hidden></div>
+      </div>
       <div id="kpi"></div>
       <div id="ptList"></div>
       <div class="row">
@@ -196,6 +226,8 @@
         <select id="optEvery"><option value="10">10 วินาที</option><option value="20">20 วินาที</option><option value="30">30 วินาที</option><option value="60">1 นาที</option></select></label>
       <label class="f"><span>อยู่ใน ER นานเกินกี่ชั่วโมงถือว่าลืมปิดเวลาออก (0 = ไม่ตัด)</span>
         <input id="optStale" type="number" min="0" max="72" step="1"></label>
+      <label class="f"><span>รหัสแผนก ER สำหรับยอดสะสม (คั่นด้วย , · เว้นว่าง = หาเองจากชื่อแผนก)</span>
+        <input id="optDeps" type="text" autocomplete="off" spellcheck="false" placeholder="เช่น 168,366,367"></label>
       <label class="chk"><input id="optHide" type="checkbox">ซ่อน HN และอาการสำคัญ (จอที่คนทั่วไปมองเห็น)</label>
       <div class="facts" id="setFacts"></div>
       <div class="row">
@@ -1149,8 +1181,9 @@ let MODE='sim', liveT=0;
 const DB={conn:null, user:{}, pg:false, cols:{}, probed:false, db:'', engine:'', hosp:'', mkt:'', lvCol:'NULL', lvSrc:'',
   lvName:new Map(), lsName:new Map(), dchName:new Map(), ptName:new Map(), istName:new Map(),
   pts:[], byVn:new Map(), today:[], rowsAll:[], det:new Map(), active:[], busy:false, nextAt:0, err:'', at:0,
-  first:true, opt:{every:20, staleH:12, hide:false}, selVn:'', staleN:0, over:0, emsAt:0, feedSig:'', tick:0};
-function defOpt(){ return {every:20, staleH:12, hide:false}; }
+  first:true, opt:{every:20, staleH:12, hide:false, erDeps:''}, selVn:'', staleN:0, over:0, emsAt:0, feedSig:'', tick:0,
+  dep:new Map(), erAuto:[], cum:null, cumErr:''};
+function defOpt(){ return {every:20, staleH:12, hide:false, erDeps:''}; }
 const optKey=()=>LS_OPT+(DB.db||'-');
 function loadOpt(){
   const o=defOpt(), s=readJson(optKey());
@@ -1158,6 +1191,7 @@ function loadOpt(){
     if([10,20,30,60].includes(s.every)) o.every=s.every;
     if(typeof s.staleH==='number'&&s.staleH>=0&&s.staleH<=72) o.staleH=s.staleH;
     o.hide=s.hide===true;
+    if(typeof s.erDeps==='string') o.erDeps=cleanDeps(s.erDeps);
   }
   DB.opt=o;
 }
@@ -1221,7 +1255,7 @@ async function runSql(text){
 async function rows(text){ const r=await sql(text); return ok(r)?r.data:null; }
 async function mustRows(text,what){ const r=await sql(text); if(!ok(r)) throw new Error(`${what}: ${explain(r)}`); return r.data; }
 
-const PROBE=['er_regist','er_emergency_level','er_emergency_type','er_leave_status','er_dch_type','er_pt_type','ovst','ovstist','opdscreen','patient'];
+const PROBE=['er_regist','er_emergency_level','er_emergency_type','er_leave_status','er_dch_type','er_pt_type','ovst','ovstist','opdscreen','patient','kskdepartment','opd_dep_queue'];
 async function probeSchema(){
   const r=await rows(`SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = ${DB.pg?'current_schema()':'DATABASE()'} AND table_name IN (${PROBE.map(sq).join(',')})`);
   const cols={};
@@ -1266,6 +1300,7 @@ function stageOf(p){
   return 'wtri';
 }
 function stageText(p){
+  if(p.stage==='sent') return p.from?`ส่งมาจาก ${depLabel(p.from)} · รอซักประวัติ`:'รอลงทะเบียน ER · รอซักประวัติ';
   if(p.stage==='wtri') return 'รอคัดกรอง';
   if(p.stage==='wdoc') return 'คัดกรองแล้ว · รอพบแพทย์';
   if(p.stage==='obs') return 'นอนสังเกตอาการ';
@@ -1276,7 +1311,7 @@ const leaveName=p=>DB.lsName.get(p.ls)||DB.dchName.get(p.dch)||'';
 const isEms=p=>{ const n=DB.istName.get(p.ist)||''; return n?/EMS|1669|รถฉุกเฉิน|กู้ชีพ/i.test(n):p.ist==='10'; };
 /* นาทีที่รอเกินเป้า (null = ไม่อยู่ในขั้นที่มีเป้า) */
 function overMin(p,now){
-  if(p.stage==='wtri'&&p.ent) return (now-p.ent)/60000-TRIAGE_TARGET;
+  if((p.stage==='wtri'||p.stage==='sent')&&p.ent) return (now-p.ent)/60000-TRIAGE_TARGET;
   if(p.stage==='wdoc'&&p.lv>=0){ const s=p.tri||p.ent; return s?(now-s)/60000-TARGET_MIN[p.lv]:null; }
   return null;
 }
@@ -1309,6 +1344,76 @@ async function loadDetail(vns){
   }
   return m;
 }
+/* ---- ยอดคนไข้ห้อง ER สะสมวันนี้ = visit วันนี้ที่ ovst.main_dep หรือ ovst.cur_dep เป็นแผนกของห้อง ER ----
+   แผนก ER หาเองจากชื่อใน kskdepartment (ฉุกเฉิน / อุบัติเหตุ / ER) เฉพาะที่ยังเปิดใช้ ไม่นับห้องยา/การเงินของ ER
+   (ที่ ppbh ได้ 168 ห้องตรวจอุบัติเหตุ-ฉุกเฉิน, 366 จุดซักประวัติห้องฉุกเฉิน, 367 หลังพบแพทย์ห้องฉุกเฉิน
+   ส่วน 361 ห้องยา ER มีแต่คนไข้นอกเวลามารับยา) · กำหนดเองได้ในหน้าตั้งค่า */
+const RE_ER_DEP=/ฉุกเฉิน|อุบัติเหตุ|\bER\b|\bEMS\b|emergency/i;
+const RE_ER_NOT=/ห้องยา|ยา\s*ER|เภสัช|pharm|การเงิน|ชำระ|cashier/i;
+function cleanDeps(s){ return [...new Set(String(s||'').split(/[\s,;]+/).map(x=>x.replace(/[^\w-]/g,'')).filter(Boolean))].join(','); }
+const erDeps=()=>DB.opt.erDeps?DB.opt.erDeps.split(','):DB.erAuto;
+const depName=c=>(DB.dep.get(c)||{}).n||('แผนก '+c);
+const depLabel=c=>{ const n=depName(c); return n.startsWith(c)?n:`${c} ${n}`; };   // บาง รพ. ใส่รหัสนำหน้าชื่อแผนกอยู่แล้ว
+async function loadDeps(){
+  DB.dep=new Map(); DB.erAuto=[];
+  if(!hasTable('kskdepartment')||!has('kskdepartment','depcode')||!has('kskdepartment','department')) return;
+  const act=has('kskdepartment','department_active')?'department_active':'NULL';
+  (await rows(`SELECT depcode AS c, department AS n, ${act} AS a FROM kskdepartment`)||[]).forEach(r=>{
+    const c=str(val(r,'c')), n=str(val(r,'n')), a=str(val(r,'a')).toUpperCase();
+    if(!c) return;
+    DB.dep.set(c,{n,a});
+    if(a!=='N'&&!/^\s*\[N\]/.test(n)&&RE_ER_DEP.test(n)&&!RE_ER_NOT.test(n)) DB.erAuto.push(c);
+  });
+}
+/* คืนค่า = คนที่ถูกส่งมาห้อง ER (cur_dep เป็นแผนก ER) แต่ยังไม่มีแถวใน er_regist → ให้นั่งรอที่จุดคัดกรอง/ที่นั่งรอซักประวัติ
+   (ถ้าดึงไม่สำเร็จ คืนรายชื่อรอบก่อน จะได้ไม่มีคนเดินออกจากฉากเพราะเน็ตสะดุด) */
+async function loadCum(day,parsed,today){
+  const codes=erDeps();
+  if(!codes.length){ DB.cum=null; DB.cumErr='ยังไม่รู้ว่าแผนกไหนคือห้อง ER — ใส่รหัสแผนกในหน้าตั้งค่า'; return []; }
+  const list=codes.map(sq).join(','), hasMain=has('ovst','main_dep');
+  const where=hasMain?`(v.main_dep IN (${list}) OR v.cur_dep IN (${list}))`:`v.cur_dep IN (${list})`;
+  let all=[], cur=null;
+  for(let g=0;g<20;g++){
+    const page=await rows(`SELECT v.vn AS vn, v.hn AS hn, ${hasMain?'v.main_dep':'NULL'} AS md, v.cur_dep AS cd, v.vsttime AS vt,
+      ${has('ovst','cur_dep_time')?'v.cur_dep_time':'NULL'} AS ct, ${has('ovst','ovstist')?'v.ovstist':'NULL'} AS ist FROM ovst v
+      WHERE v.vstdate = ${sq(day)} AND ${where}${cur!=null?` AND v.vn > ${sq(cur)}`:''} ORDER BY v.vn LIMIT ${PAGE_SIZE}`);
+    if(!page){ DB.cumErr='ดึงยอดสะสมไม่สำเร็จ — แสดงตัวเลขรอบก่อน'; return DB.sent||[]; }
+    all=all.concat(page);
+    if(page.length<PAGE_SIZE) break;
+    const nx=str(val(page[page.length-1],'vn')); if(!nx||nx===cur) break; cur=nx;
+  }
+  const set=new Set(codes), reg=new Map(today.map(p=>[p.vn,p])), known=new Set(parsed.map(p=>p.vn)), sent=[];
+  const C={total:0, main:0, sent:0, reg:0, out:0, lv:[0,0,0,0,0], noLv:0, hours:new Array(24).fill(0), codes, notReg:0};
+  for(const r of all){
+    const vn=str(val(r,'vn')); if(!vn) continue;
+    const md=str(val(r,'md')), cd=str(val(r,'cd'));
+    C.total++;
+    if(set.has(md)) C.main++; else C.sent++;
+    const h=parseInt(str(val(r,'vt')).slice(0,2),10); if(h>=0&&h<24) C.hours[h]++;
+    const p=reg.get(vn);
+    if(p){ C.reg++; if(p.stage==='out') C.out++; if(p.lv>=0) C.lv[p.lv]++; else C.noLv++; }
+    else C.notReg++;
+    if(!known.has(vn)&&set.has(cd)&&!/หลังพบแพทย์|หลังตรวจ/.test(depName(cd))){   // อยู่จุดหลังพบแพทย์แล้วไม่ต้องกลับไปรอซักประวัติ
+      const ent=parseDT(day+' '+str(val(r,'ct')))||parseDT(day+' '+str(val(r,'vt')));
+      sent.push({vn, hn:str(val(r,'hn')), day, ent, tri:null, doc:null, left:false, leftAt:null, lid:'', ls:'', dch:'', pt:'', obs:'', nw:'',
+        an:'', ist:str(val(r,'ist')), det:null, slot:null, active:false, lv:-1, stage:'sent', from:set.has(md)?'':md});
+    }
+  }
+  DB.cum=C; DB.cumErr='';
+  /* เวลาที่ถูกส่งเข้าห้อง ER จริง = opd_dep_queue.queue_datetime ของแผนก ER — ovst.cur_dep_time ที่ ppbh มักเท่ากับเวลามาถึง รพ.
+     (26/11: ส่งจากจุดซักประวัติจักษุ 09:08 แต่ cur_dep_time 06:13 → ถ้าใช้ cur_dep_time จะขึ้นว่ารอมา 3 ชม. กว่า) */
+  if(sent.length&&hasTable('opd_dep_queue')&&has('opd_dep_queue','queue_datetime')&&has('opd_dep_queue','depcode')){
+    for(let i=0;i<sent.length;i+=DETAIL_CHUNK){
+      const chunk=sent.slice(i,i+DETAIL_CHUNK);
+      const r=await rows(`SELECT q.vn AS vn, MAX(q.queue_datetime) AS qt FROM opd_dep_queue q
+        WHERE q.vn IN (${chunk.map(p=>sq(p.vn)).join(',')}) AND q.depcode IN (${list}) GROUP BY q.vn`);
+      const m=new Map((r||[]).map(x=>[str(val(x,'vn')),parseDT(val(x,'qt'))]));
+      for(const p of chunk){ const qt=m.get(p.vn); if(qt) p.ent=qt; }
+    }
+  }
+  return sent;
+}
+
 function parseRow(r){
   const vd=str(val(r,'vd')).slice(0,10);
   const ent=parseDT(val(r,'ent'))||parseDT(vd+' '+str(val(r,'vt')));
@@ -1320,7 +1425,7 @@ function parseRow(r){
   p.stage=stageOf(p);
   return p;
 }
-const rankOf=p=>p.stage==='wtri'?-1:(p.lv>=0?p.lv:4.5);
+const rankOf=p=>p.stage==='sent'?-2:p.stage==='wtri'?-1:(p.lv>=0?p.lv:4.5);
 const listOrder=(a,b)=>rankOf(a)-rankOf(b)||(a.ent||0)-(b.ent||0);
 
 /* ---- ตำแหน่งในฉาก ----
@@ -1566,8 +1671,9 @@ function liveFrame(dt){
 }
 
 /* ---- จัดช่อง: คนเดิมอยู่ที่เดิม · คนใหม่ได้ช่องว่าง · เตียง/จุดคัดกรองว่าง → ย้ายคนที่ควรได้ก่อนจากเก้าอี้ขึ้นไป ---- */
-const zoneOf=p=>p.stage==='wtri'?'wait':'z'+(p.lv>=0?p.lv:4);
-const lyingFirst=p=>p.stage==='wtri'||p.stage==='wdoc'?1:0;
+const zoneOf=p=>p.stage==='wtri'||p.stage==='sent'?'wait':'z'+(p.lv>=0?p.lv:4);
+/* ลำดับได้ช่องดีก่อน: คนที่ถูกส่งต่อมาได้เก้าอี้ที่โต๊ะคัดกรองก่อน · คนที่ต้องนอนได้เตียงก่อนคนรอแพทย์ */
+const lyingFirst=p=>p.stage==='sent'?-1:p.stage==='wtri'||p.stage==='wdoc'?1:0;
 function assignSlots(list){
   const want=new Map(), used=new Set(), cur=new Map(), groups=new Map();
   for(const E of pool){ const S=E.L; if(S&&!S.leaving&&!S.fadeOut&&S.target) cur.set(S.vn,S.target); }
@@ -1637,6 +1743,10 @@ async function liveLoad(){
       if(staleMs&&p.ent&&t-p.ent>staleMs){ stale++; continue; }
       list.push(p);
     }
+    /* ถูกส่งต่อมาห้อง ER แต่ยังไม่ลงทะเบียน er_regist → นั่งรอซักประวัติ (ยอดสะสมดึงมาพร้อมกันในคำสั่งเดียว) */
+    const sent=await loadCum(day,parsed,today);
+    DB.sent=sent;
+    for(const p of sent){ if(staleMs&&p.ent&&t-p.ent>staleMs){ stale++; continue; } list.push(p); }
     const det=await loadDetail(list.map(p=>p.vn));
     for(const p of list){
       p.det=det.get(p.vn)||DB.det.get(p.vn)||null;
@@ -1663,11 +1773,11 @@ const LG_DEF=[0,1,2,3,4].map(i=>$('lg'+i).textContent);
 function setDot(s){ $('liveDot').className=s; }
 function who(p,i){ return DB.opt.hide?`ผู้ป่วย ${i!=null?'#'+(i+1):''}`.trim():`HN ${p.hn}`; }
 function renderStats(){
-  const c={wtri:0,wdoc:0,tx:0,obs:0,admit:0}, per=[0,0,0,0,0], now=Date.now();
+  const c={wtri:0,sent:0,wdoc:0,tx:0,obs:0,admit:0}, per=[0,0,0,0,0], now=Date.now();
   let lateTri=0, lateDoc=0;
-  for(const p of DB.pts){ c[p.stage]++; if(p.lv>=0) per[p.lv]++; const o=overMin(p,now); if(o!=null&&o>0){ if(p.stage==='wtri') lateTri++; else lateDoc++; } }
+  for(const p of DB.pts){ c[p.stage]++; if(p.lv>=0) per[p.lv]++; const o=overMin(p,now); if(o!=null&&o>0){ if(p.stage==='wtri'||p.stage==='sent') lateTri++; else lateDoc++; } }
   const set=(id,n,warn)=>{ const el=$(id); el.querySelector('b').textContent=n; el.classList.toggle('warn',!!warn); };
-  set('sTri',c.wtri,lateTri); set('sDoc',c.wdoc,lateDoc); set('sTx',c.tx+c.obs); set('sAdm',c.admit);
+  set('sTri',c.wtri+c.sent,lateTri); set('sDoc',c.wdoc,lateDoc); set('sTx',c.tx+c.obs); set('sAdm',c.admit);
   per.forEach((n,i)=>{ $('lc'+i).textContent=n?String(n):''; });
 }
 function renderKpi(){
@@ -1677,16 +1787,63 @@ function renderKpi(){
     if(p.ent&&p.doc){ const m=(p.doc-p.ent)/60000; if(m>=0&&m<=720) d2d.push(m); }
     if(p.ent&&p.leftAt){ const m=(p.leftAt-p.ent)/60000; if(m>=0&&m<=2880) los.push(m); }
   }
-  const left=T.filter(p=>p.stage==='out').length, mt=median(d2t), md=median(d2d), ml=median(los);
-  const bits=[`วันนี้ ${T.length} ราย · ออกจาก ER แล้ว ${left}`];
+  const mt=median(d2t), md=median(d2d), ml=median(los), bits=[];
   if(md!=null) bits.push(`มาถึง→พบแพทย์ ${durTxt(md)}`);
   if(mt!=null) bits.push(`มาถึง→คัดกรอง ${durTxt(mt)}`);
   if(ml!=null) bits.push(`อยู่ใน ER ${durTxt(ml)}`);
-  let s=bits.join(' · ')+(md!=null||mt!=null||ml!=null?' (ค่ากลาง)':'');
-  if(DB.staleN) s+=`<br>ไม่นับ ${DB.staleN} รายที่อยู่เกิน ${DB.opt.staleH} ชม. โดยไม่มีเวลาออก (ปรับได้ในตั้งค่า)`;
-  if(DB.over) s+=`<br>${DB.over} คนไม่มีที่ว่างในฉาก — ดูในรายการ`;
-  $('kpi').innerHTML=s;
+  const L2=[];
+  if(bits.length) L2.push('ค่ากลางวันนี้: '+bits.join(' · '));
+  if(DB.staleN) L2.push(`ไม่นับ ${DB.staleN} รายที่อยู่เกิน ${DB.opt.staleH} ชม. โดยไม่มีเวลาออก (ปรับได้ในตั้งค่า)`);
+  if(DB.over) L2.push(`${DB.over} คนไม่มีที่ว่างในฉาก — ดูในรายการ`);
+  $('kpi').innerHTML=L2.join('<br>');
+  $('kpi').hidden=!L2.length;
 }
+/* ---- กล่องยอดสะสมวันนี้: ย่อไว้เห็นแค่ตัวเลข กดเพื่อขยายดูรายละเอียด (จำสถานะไว้ในเครื่องนี้) ---- */
+const LS_CUM='er3d.cumOpen';
+function setCumOpen(open){
+  $('cumHead').setAttribute('aria-expanded',open?'true':'false');
+  $('cumBody').hidden=!open;
+  lsSet(LS_CUM,open?'1':'0');
+  if(open) renderCum();
+}
+function renderCum(){
+  const C=DB.cum, T=DB.today;
+  $('cumN').textContent=C?String(C.total):'–';
+  $('cumSub').textContent=C&&C.sent?`(ส่งมาจากแผนกอื่น ${C.sent})`:'';
+  if($('cumBody').hidden) return;
+  if(!C){ $('cumBody').innerHTML=`<div class="cumNote">${esc(DB.cumErr||'กำลังดึงข้อมูล…')}</div>`; return; }
+  const row=(k,v)=>`<div class="cr"><span>${k}</span><b>${v}</b></div>`;
+  const left=T.filter(p=>p.stage==='out').length;
+  const chips=TRI.map((t,i)=>`<span class="chip"><span class="dot" style="background:${t.hex}"></span>${t.name} ${C.lv[i]}</span>`).join('')
+    +(C.noLv?`<span class="chip"><span class="dot" style="background:#b8c4cc"></span>ไม่ระบุสี ${C.noLv}</span>`:'');
+  const mx=Math.max(1,...C.hours), nowH=new Date().getHours();
+  const bars=C.hours.map((n,h)=>`<i class="${h===nowH?'now':''}" style="height:${n?Math.max(6,n/mx*100):0}%" title="${p2(h)}:00–${p2(h)}:59 · ${n} คน"></i>`).join('');
+  $('cumBody').innerHTML=
+     row('เข้า ER เป็นจุดแรก (main_dep)',C.main)
+    +row('ส่งมาจากแผนกอื่น (cur_dep)',C.sent)
+    +row('ลงทะเบียน ER (er_regist) แล้ว',`${C.reg}${C.notReg?` · ยังไม่ลง ${C.notReg}`:''}`)
+    +row('ออกจาก ER แล้ว',left)
+    +(C.reg?`<div class="chips" title="ระดับคัดกรองของคนที่ลงทะเบียน ER แล้ว">${chips}</div>`:'')
+    +`<div class="hours" aria-label="จำนวนคนไข้ตามชั่วโมงที่มาถึง">${bars}</div><div class="hlab"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>`
+    +`<div class="cumNote">นับ visit วันนี้ที่ main_dep หรือ cur_dep เป็น ${C.codes.map(c=>esc(depLabel(c))).join(', ')}${DB.opt.erDeps?' (กำหนดเอง)':''}${DB.cumErr?' · '+esc(DB.cumErr):''}</div>`;
+}
+function fitTop(){
+  const lg=$('legend'), shown=lg&&getComputedStyle(lg).display!=='none';
+  const gap=shown&&MODE==='live'?lg.offsetHeight+28:0;   // โหมดจำลองแผงสั้นอยู่แล้ว ไม่ต้องจำกัด
+  $('top').style.maxHeight=gap?`calc(100vh - 28px - ${gap}px)`:'';
+  fitView();
+}
+/* โหมดข้อมูลจริงแผงซ้ายกว้าง บังโต๊ะคัดกรองกับที่นั่งรอ → เลื่อนจุดกึ่งกลางภาพไปทางขวาครึ่งหนึ่งของความกว้างแผง
+   (setViewOffset เลื่อนเฉพาะภาพ มุมกล้องเท่าเดิม) · จอแคบ (มือถือ) แผงอยู่ด้านบน ไม่ต้องเลื่อน */
+function fitView(){
+  const W=window.innerWidth, H=window.innerHeight;
+  const d=MODE==='live'&&W>760?Math.round(($('top').getBoundingClientRect().right+6)/2):0;
+  if(d) camera.setViewOffset(W,H,-d,0,W,H); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize',fitTop);
+$('cumHead').addEventListener('click',(e)=>{ blurIfMouse(e); setCumOpen($('cumBody').hidden); fitTop(); });
+setCumOpen(lsGet(LS_CUM)==='1');
 function renderList(){
   const now=Date.now(), box=$('ptList');
   if(!DB.pts.length){ box.innerHTML=`<div class="ptEmpty">${DB.at?'ตอนนี้ไม่มีผู้ป่วยในห้องฉุกเฉิน':'กำลังดึงข้อมูล…'}</div>`; return; }
@@ -1709,6 +1866,10 @@ function renderFeed(){
     if(p.tri&&p.lv>=0) ev.push({t:p.tri,c:TRI[p.lv].hex,h:`${w} คัดกรองได้ <b>สี${TRI[p.lv].name}</b>`});
     if(p.doc) ev.push({t:p.doc,c:'#0f6e8c',h:`แพทย์เริ่มตรวจ ${w}`});
     if(p.left&&p.leftAt) ev.push({t:p.leftAt,c:'#7b8a96',h:`${w} ออกจาก ER · ${esc(leaveName(p)||'จำหน่าย')}`});
+  }
+  for(const p of DB.sent||[]){
+    const w=DB.opt.hide?'ผู้ป่วย':esc(who(p));
+    if(p.ent) ev.push({t:p.ent,c:'#9aa9b6',h:p.from?`${w} ถูกส่งมาจาก ${esc(depLabel(p.from))}`:`${w} มาถึง ER (ยังไม่ลงทะเบียน)`});
   }
   ev.sort((a,b)=>a.t-b.t);
   const items=ev.slice(-5), sig=items.map(e=>e.t+e.h).join('|');
@@ -1737,6 +1898,7 @@ function renderInfoLive(){
     +kv('มาถึง ER',p.ent?`${hhmm(p.ent)} <span class="muted">(อยู่มา ${durTxt((now-p.ent)/60000)})</span>`:'')
     +kv('คัดกรอง',at(p.tri))+kv('แพทย์ตรวจ',at(p.doc))
     +kv('สัญญาณชีพ',esc(vs))+kv('NEWS2',esc(p.nw))
+    +kv('ส่งมาจาก',p.from?esc(depLabel(p.from)):'')
     +kv('มาโดย',esc([DB.istName.get(p.ist)||'',DB.ptName.get(p.pt)||''].filter(Boolean).join(' · ')))
     +(H?'':kv('AN',esc(p.an)))
     +kv('ในฉาก',esc(p.slot?p.slot.name:'ไม่มีที่ว่างในฉาก'));
@@ -1746,7 +1908,7 @@ function renderLive(){
   const n=DB.pts.length;
   $('summary').textContent=`${DB.hosp||DB.db} · อยู่ใน ER ตอนนี้ ${n} คน`;
   const er=$('liveErr'); er.textContent=DB.err; er.classList.toggle('hidden',!DB.err);
-  renderStats(); renderKpi(); renderList(); renderFeed();
+  renderStats(); renderCum(); renderKpi(); renderList(); renderFeed(); fitTop();
   if(DB.selVn) renderInfoLive();
 }
 let hudT=0;
@@ -1797,7 +1959,7 @@ function enterSim(){
   $('title').textContent='แบบจำลองห้องฉุกเฉิน 3 มิติ'; $('hint').textContent=HINT_SIM;
   $('lgTitle').textContent='ระดับความเร่งด่วน';
   LG_DEF.forEach((t,i)=>{ $('lg'+i).textContent=t; $('lc'+i).textContent=''; });
-  rebuild();
+  rebuild(); fitTop();
 }
 function showConn(msg,bad){
   $('connMsg').textContent=msg||'วาง BMS Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อแสดงผู้ป่วยในห้องฉุกเฉินตอนนี้จากตาราง er_regist — หรือกด “ดูแบบจำลอง”';
@@ -1841,6 +2003,8 @@ async function connect(sid){
   await loadMap('er_dch_type','er_dch_type','name',DB.dchName);
   await loadMap('er_pt_type','er_pt_type','name',DB.ptName);
   await loadMap('ovstist','ovstist','name',DB.istName);
+  await loadDeps();
+  DB.cum=null; DB.cumErr=''; DB.sent=[];
   hideConn(); $('setDlg').classList.add('hidden');
   enterLive();
 }
@@ -1855,6 +2019,7 @@ function factsHtml(){
     `er_regist วันนี้ ${DB.today.length} แถว · ระดับคัดกรองจาก ${esc(DB.lvSrc)} (${DB.lvName.size} ระดับ)`,
     `สถานะ ER: er_leave_status ${DB.lsName.size} แบบ · er_dch_type ${DB.dchName.size} แบบ`,
     `อาการสำคัญ/สัญญาณชีพ: ${hasTable('opdscreen')?'opdscreen':'ไม่มีตาราง opdscreen'}`,
+    `แผนก ER ที่นับยอดสะสม: ${erDeps().length?erDeps().map(c=>esc(depLabel(c))).join(', '):'ยังหาไม่เจอ'}${DB.opt.erDeps?' (กำหนดเอง)':' (หาเองจากชื่อแผนก)'}`,
   ].join('<br>');
 }
 
@@ -1878,6 +2043,7 @@ $('btnView').addEventListener('click',(e)=>{ blurIfMouse(e); resetView(); });
 $('btnSet').addEventListener('click',(e)=>{
   blurIfMouse(e);
   $('optEvery').value=String(DB.opt.every); $('optStale').value=String(DB.opt.staleH); $('optHide').checked=!!DB.opt.hide;
+  $('optDeps').value=DB.opt.erDeps; $('optDeps').placeholder=DB.erAuto.length?`หาเองได้: ${DB.erAuto.join(',')}`:'เช่น 168,366,367';
   $('setFacts').innerHTML=factsHtml();
   $('setDlg').classList.remove('hidden');
 });
@@ -1885,6 +2051,8 @@ $('setClose').addEventListener('click',()=>{
   const ev=+$('optEvery').value; if([10,20,30,60].includes(ev)) DB.opt.every=ev;
   const h=Math.round(+$('optStale').value); if(Number.isFinite(h)) DB.opt.staleH=clamp(h,0,72);
   DB.opt.hide=$('optHide').checked;
+  const deps=cleanDeps($('optDeps').value);
+  if(deps!==DB.opt.erDeps){ DB.opt.erDeps=deps; DB.cum=null; }
   saveOpt(); $('setDlg').classList.add('hidden');
   DB.feedSig=''; DB.nextAt=0; hudT=1; renderLive();
 });
