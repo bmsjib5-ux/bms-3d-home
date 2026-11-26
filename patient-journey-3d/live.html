@@ -921,14 +921,26 @@ const MERGED=mergeStatic(world);
    ทุกอย่างอยู่ใน deskLayer (userData.dyn) สร้างใหม่เมื่อชุดโต๊ะเปลี่ยนเท่านั้น (deskKey) */
 const deskLayer=new THREE.Group(); deskLayer.userData.dyn=true; world.add(deskLayer);
 const TRI_X=[-13.8*S,11.8*S], TRI_ROW_Z=2.1*S-1.1, TRI_LANE_MIN=1.2;   // แนวโต๊ะ = แนวเคาน์เตอร์ซักประวัติเดิม
-const TRI_HALL=[[TRI_X[0],TRI_X[1],2.3*S,6.6*S],[-3*S,11.8*S,6.6*S,9.8*S],[-13.8*S,-11.2*S,6.6*S,11.4*S]];
+/* ทางเดินหน้าแถวโต๊ะ (ระหว่างเก้าอี้คนไข้ที่โต๊ะกับแถวรอ) · ฉากกั้นปิดช่องระหว่างโต๊ะ → ข้ามแถวโต๊ะได้ที่หัว/ท้ายแถวเท่านั้น */
+const TRI_WALK=TRI_ROW_Z+1.35, TRI_LANE_Z=Math.max(2.3*S,TRI_ROW_Z+1.9), TRI_CROSS=[TRI_X[0]-0.6,TRI_X[1]+0.6];
+const TRI_HALL=[[TRI_X[0],TRI_X[1],TRI_LANE_Z,6.6*S],[-3*S,11.8*S,6.6*S,9.8*S],[-13.8*S,-11.2*S,6.6*S,11.4*S]];
 const TRI_BACK=[[-3*S,15*S,10.4*S,13.2*S]];
 const EXAM_BOX=[-7*S+0.7,7*S-0.7,BZ0+0.7,WALLZ-0.8], EXAM_AISLE=1.15, EXAM_CW=2.4, EXAM_CH=1.95, EXAM_FRONT=2.0;
 const PH_C=[11.25*S,-9.2*S-1.3], PH_ROOM=(15.5-7)*S-1.2;               // กลางเคาน์เตอร์ห้องยาเดิม · ความกว้างห้อง
 const RE_TRI=/ซักประวัติ|คัดกรอง|screen|triage|จุดแรกรับ/i, RE_POST=/หลังพบแพทย์|หลังตรวจ/;
 let deskKey='', deskByDep=new Map();
 const topMats=new Map(), deskTop=c=>{ if(!topMats.has(c)) topMats.set(c,mat(c,{roughness:.5})); return topMats.get(c); };
-const SHARED_M=new Set([deskM,woodM,darkM,frameM,glassM,seatM]);
+/* ฉากกั้น (ผู้ใช้ขอ 26/11/2569): แผงผ้าสีฟ้าอ่อนโปร่งเล็กน้อย มีราวบนและขาตั้ง — ไม่ทอดเงา จะได้ไม่มืดทับโต๊ะ */
+const screenM=new THREE.MeshStandardMaterial({color:'#cfe2ea',roughness:.85,transparent:true,opacity:.78});
+const SHARED_M=new Set([deskM,woodM,darkM,frameM,glassM,seatM,screenM]);
+/* แผงจาก (x0,z0) ถึง (x1,z1) แนวตรงตามแกน x หรือ z */
+function screenPanel(x0,z0,x1,z1,h){
+  const len=Math.hypot(x1-x0,z1-z0); if(len<0.2) return;
+  const cx=(x0+x1)/2, cz=(z0+z1)/2, ry=Math.atan2(x1-x0,z1-z0);
+  dBox(0.04,h-0.12,len,screenM,cx,0.12,cz,ry,false);
+  dBox(0.06,0.05,len+0.04,frameM,cx,h-0.02,cz,ry,false);
+  for(const t of [0,1]){ const px=x0+(x1-x0)*t, pz=z0+(z1-z0)*t; dBox(0.05,h,0.05,frameM,px,0,pz,0,false); dBox(0.36,0.04,0.36,frameM,px,0,pz,ry,false); }
+}
 function isTriDep(cd){ const n=(state.dep&&state.dep.get(cd))||''; return RE_TRI.test(n)&&!RE_POST.test(n); }
 function shortDep(cd){
   const n=str(state.dep.get(cd))||('แผนก '+cd);
@@ -1001,6 +1013,8 @@ function buildDesks(want){
   const nT=want[3].length;
   if(nT){
     const [X0,X1]=TRI_X, w=(X1-X0)/nT, z=TRI_ROW_Z;
+    /* ฉากกั้นระหว่างจุด: ตั้งตามแนวแบ่งช่อง ตั้งแต่หลังพยาบาลถึงหลังเก้าอี้คนไข้ (+หัว/ท้ายแถว) */
+    for(let i=0;i<=nT;i++) screenPanel(X0+i*w,z-1.05,X0+i*w,z+1.1,1.55);
     want[3].forEach((cd,i)=>{
       const xa=X0+i*w, xb=xa+w, cx=(xa+xb)/2, dw=Math.min(1.5,w*0.62);
       dBox(dw,0.76,0.55,deskM,cx,0,z); dBox(dw+0.06,0.05,0.6,deskTop(P3.color),cx,0.76,z,0,false);
@@ -1008,7 +1022,9 @@ function buildDesks(want){
       dPerson({shirt:'#7cc6d8',pants:'#7cc6d8',cap:true,hair:HAIRS[i%HAIRS.length]},cx,z-0.62,0);
       dChair(cx,z+0.75,Math.PI);
       const rects=TRI_HALL.map(([a,b,c,d])=>[Math.max(a,xa+0.05),Math.min(b,xb-0.05),c,d]).filter(r=>r[1]-r[0]>=0.5);
-      desks.push(mkDesk(cd,P3,[cx,z+0.75],[[xa,CZ],[xa,z+1.3]],rects,[[cx,z+0.75,Math.PI]]));
+      /* จากทางเดินหลักไปหัว/ท้ายแถวที่ใกล้กว่า → เดินตามทางเดินหน้าแถวโต๊ะ → เข้าช่องของตัวเอง */
+      const ex=i<nT/2?TRI_CROSS[0]:TRI_CROSS[1];
+      desks.push(mkDesk(cd,P3,[cx,z+0.75],[[ex,CZ],[ex,TRI_WALK],[cx,TRI_WALK]],rects,[[cx,z+0.75,Math.PI]]));
     });
   }
   /* ---- โต๊ะแพทย์: ตารางในห้องตรวจ ซ้าย/ขวาของทางเดินกลาง · แถวแรกชิดผนังใน · แพทย์หันออกหาประตู ---- */
@@ -1024,8 +1040,15 @@ function buildDesks(want){
       dBox(0.5,0.32,0.05,darkM,cx+dw*0.22,0.8,dz-0.18,0,false);
       dPerson({shirt:'#fbfbfb',pants:'#2c3e5a',coat:true,steth:true,hair:HAIRS[i%HAIRS.length]},cx,dz-0.62,0);
       dChair(cx,pz,Math.PI);
+      /* ฉากกั้นต่อโต๊ะแพทย์: ด้านหลังแพทย์ (กั้นจากแถวด้านใน — แถวแรกชิดผนังห้องอยู่แล้ว)
+         + ด้านข้างระหว่างโต๊ะ เฉพาะช่วงแพทย์/โต๊ะ เว้นด้านหน้าไว้เป็นทางเดินจากทางเดินกลาง */
+      if(row>0) screenPanel(xa,za,xb,za,1.75);
+      if(left&&k<G.half-1) screenPanel(xb,za,xb,pz-0.25,1.75);
+      if(!left&&k>0) screenPanel(xa,za,xa,pz-0.25,1.75);
       const wr=[[xa+0.15,xb-0.15,pz+0.55,zb-0.1]].filter(r=>r[3]-r[2]>=0.45);
-      desks.push(mkDesk(cd,P5,[cx,pz],P5.via.slice(),wr,[[cx,pz,Math.PI]]));
+      /* ลอดประตู → ทางเดินกลาง → เลี้ยวเข้าแถวของโต๊ะตัวเองที่ด้านหน้าเก้าอี้คนไข้ ไม่เดินทะลุฉากของแถวอื่น */
+      const ax=left?-EXAM_AISLE+0.35:EXAM_AISLE-0.35;
+      desks.push(mkDesk(cd,P5,[cx,pz],[...P5.via,[ax,pz+0.45]],wr,[[cx,pz,Math.PI]]));
     });
   }
   /* ---- ช่องจ่ายยา N ช่อง: เคาน์เตอร์ยาวตามจำนวนช่อง (ไม่เกินความกว้างห้อง) + เภสัชกรประจำช่อง + ป้ายเลขช่อง ---- */
@@ -1045,7 +1068,7 @@ function buildDesks(want){
   }
   DESKS=desks; deskByDep=new Map(desks.map(d=>[d.dep,d]));
   triFurn.visible=!nT; examFurn.visible=!nE;
-  boardFurn.position.x=nT?TRI_X[1]+1.4-4.4:0;                             // กระดานย้ายไปปลายแถวโต๊ะ
+  boardFurn.position.x=nT?TRI_X[1]+2.2-4.4:0;                             // กระดานย้ายไปพ้นทางข้ามท้ายแถวโต๊ะ
   renderer.shadowMap.needsUpdate=true;
   return true;
 }
