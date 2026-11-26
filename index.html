@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>แบบจำลองห้องฉุกเฉิน 3 มิติ</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#dde7ed;color:#10222e;
+    font-family:"Noto Sans Thai","Leelawadee UI","Tahoma","Sarabun",system-ui,sans-serif;}
+  #app{position:fixed;inset:0}
+  #app canvas{display:block;touch-action:none;cursor:grab;outline:none}
+  #app canvas.dragging{cursor:grabbing}
+  #ui{position:fixed;inset:0;pointer-events:none}
+  .panel{pointer-events:auto;background:rgba(255,255,255,.84);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    border:1px solid rgba(16,34,46,.08);border-radius:14px;box-shadow:0 8px 26px rgba(16,34,46,.14)}
+  #top{position:absolute;left:14px;top:14px;padding:12px 14px;width:min(370px,calc(100vw - 28px));box-sizing:border-box}
+  h1{font-size:18px;margin:0 0 2px;letter-spacing:.2px}
+  #summary{font-size:12px;color:#0f6e8c;margin:0 0 4px;font-weight:600}
+  .hint{font-size:12px;opacity:.78;margin:0 0 10px;line-height:1.5}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  button{font:inherit;font-size:13px;border:0;border-radius:9px;padding:7px 11px;background:#0f6e8c;color:#fff;cursor:pointer;transition:filter .15s}
+  button:hover{filter:brightness(1.1)}
+  button.ghost{background:#e2ecf1;color:#10313f}
+  button:focus-visible,input:focus-visible{outline:2px solid #f4c22b;outline-offset:2px}
+  label.ctl{display:grid;grid-template-columns:92px 1fr 56px;align-items:center;font-size:13px;gap:8px;margin:4px 0}
+  label.ctl span:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  input[type=range]{width:100%;accent-color:#0f6e8c}
+  .progress{height:6px;background:#d6e2e8;border-radius:3px;overflow:hidden;margin-top:8px}
+  #bar{height:100%;width:0;background:linear-gradient(90deg,#0f6e8c,#3fa45b)}
+  #clockTxt{font-size:12px;opacity:.8;margin-top:5px;display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+  #legend{position:absolute;left:14px;bottom:14px;padding:10px 12px;font-size:12.5px}
+  #legend h2,#feed h2,#info h2{font-size:13px;margin:0 0 6px}
+  .lg{display:flex;align-items:center;gap:7px;margin:3px 0}
+  .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.25);flex:none;margin-top:3px}
+  .lg .dot{margin-top:0}
+  .sq{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none}
+  #feed{position:absolute;right:14px;bottom:14px;width:min(380px,calc(100vw - 28px));box-sizing:border-box;padding:10px 12px;font-size:12.5px}
+  .ev{display:flex;gap:8px;align-items:flex-start;padding:3px 0;line-height:1.45}
+  .ev.new{animation:fin .45s ease}
+  .muted{opacity:.6}
+  @keyframes fin{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  #info{position:absolute;right:14px;top:14px;width:280px;box-sizing:border-box;padding:12px 14px;font-size:13px}
+  #info h2{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+  #info h2 button{padding:2px 9px;font-size:15px}
+  .kv{display:grid;grid-template-columns:92px 1fr;gap:6px;padding:4px 0;border-top:1px solid rgba(16,34,46,.07)}
+  .kv span{opacity:.7}
+  .kv b{font-weight:600;display:flex;gap:6px;align-items:flex-start}
+  .hidden{display:none!important}
+  #prompt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #prompt .card{pointer-events:auto;text-align:center;padding:22px 26px;max-width:340px}
+  #prompt button{font-size:17px;padding:11px 22px}
+  #prompt p{font-size:13px;opacity:.8;margin:12px 0 0;line-height:1.5}
+  #fallback{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8f0f4,#cfdde5);padding:20px;box-sizing:border-box}
+  #fallback .card{background:#fff;border-radius:16px;padding:26px 28px;max-width:440px;box-shadow:0 10px 30px rgba(0,0,0,.12);text-align:center}
+  #fallback h2{margin:0 0 10px;font-size:20px}
+  #fallback p{margin:0;line-height:1.6;font-size:14px;opacity:.85}
+  /* ---- โหมดข้อมูลจริง ---- */
+  #liveLine{display:flex;align-items:center;gap:7px;font-size:12px;margin:2px 0 8px;line-height:1.4}
+  #liveDot{width:9px;height:9px;border-radius:50%;background:#9aa9b6;flex:none}
+  #liveDot.on{background:#2e9d58;box-shadow:0 0 0 0 rgba(46,157,88,.5);animation:pulse 2s infinite}
+  #liveDot.busy{background:#f4a62b}
+  #liveDot.off{background:#d1495b}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,157,88,.45)}70%{box-shadow:0 0 0 7px rgba(46,157,88,0)}100%{box-shadow:0 0 0 0 rgba(46,157,88,0)}}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0 0 6px}
+  .stat{background:#eef4f7;border-radius:9px;padding:5px 4px 4px;text-align:center;line-height:1.15}
+  .stat b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:10.5px;opacity:.75}
+  .stat.warn b{color:#c2410c}
+  #kpi{font-size:11.5px;opacity:.8;margin:0 0 6px;line-height:1.45}
+  #ptList{max-height:min(34vh,300px);overflow:auto;margin:0 -4px 8px;padding:0 4px;border-top:1px solid rgba(16,34,46,.08)}
+  .pt{display:grid;grid-template-columns:14px 1fr auto;gap:7px;align-items:center;width:100%;text-align:left;background:none;color:inherit;
+    border-radius:7px;padding:5px 4px;font-size:12.5px;border-bottom:1px solid rgba(16,34,46,.05)}
+  .pt:hover{background:#eef4f7;filter:none}
+  .pt.on{background:#dff1f7}
+  .pt .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pt .st{font-size:11px;opacity:.7;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pt .tm{font-variant-numeric:tabular-nums;font-weight:600;font-size:12px}
+  .pt .tm.warn{color:#c2410c}
+  .ptEmpty{font-size:12px;opacity:.65;padding:8px 2px}
+  .cnt{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums;min-width:18px;text-align:right}
+  #legend .lg{min-width:190px}
+  .err{font-size:12px;color:#b42318;margin:0 0 6px;line-height:1.45}
+  #homeLnk{font-size:12px;color:#0f6e8c;text-decoration:none}
+  #homeLnk:hover{text-decoration:underline}
+  .dlg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(16,34,46,.28);pointer-events:auto;padding:16px;box-sizing:border-box}
+  .dlg .card{background:#fff;border-radius:14px;padding:18px 20px;width:min(420px,100%);box-shadow:0 14px 40px rgba(16,34,46,.25)}
+  .dlg h2{margin:0 0 8px;font-size:17px}
+  .dlg p{margin:0 0 12px;font-size:13px;line-height:1.55;opacity:.85}
+  .dlg p.bad{color:#b42318;opacity:1}
+  .dlg input[type=text],.dlg input[type=password],.dlg input[type=number],.dlg select{font:inherit;font-size:14px;width:100%;box-sizing:border-box;
+    padding:8px 10px;border:1px solid #c5d3db;border-radius:9px;background:#fff;color:inherit}
+  .dlg .f{display:block;font-size:13px;margin:0 0 10px}
+  .dlg .f > span{display:block;margin-bottom:4px;opacity:.8}
+  .dlg .chk{display:flex;gap:8px;align-items:center;font-size:13px;margin:0 0 10px}
+  .dlg .facts{font-size:11.5px;opacity:.7;line-height:1.5;margin:0 0 12px;background:#f3f7f9;border-radius:8px;padding:7px 9px}
+  .dlg .row{justify-content:flex-end;margin:4px 0 0}
+  @media (max-width:760px){
+    #legend{display:none}
+    #ptList{max-height:22vh}
+    .hint{font-size:11px}
+    h1{font-size:16px}
+    #feed{font-size:11.5px;padding:8px 10px}
+    #feed .ev:nth-last-child(n+3){display:none}
+    #info{left:14px;right:14px;width:auto;top:auto;bottom:118px}
+  }
+  @media (max-height:560px){ #legend{display:none} }
+  @media (prefers-reduced-motion:reduce){ .ev.new{animation:none} button{transition:none} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="ui">
+  <div id="top" class="panel">
+    <h1 id="title">แบบจำลองห้องฉุกเฉิน 3 มิติ</h1>
+    <div id="summary">กำลังเตรียมฉาก…</div>
+    <p class="hint" id="hint">ลากเพื่อหมุนกล้อง • ล้อเมาส์/จีบนิ้วเพื่อซูม • ดับเบิลคลิกเพื่อรีเซ็ตมุมมอง • คลิกผู้ป่วยเพื่อดูสถานะ • Space เล่น/หยุด</p>
+    <div id="simBox">
+      <div class="row">
+        <button id="play" aria-label="เล่นหรือหยุดชั่วคราว">⏸ หยุดชั่วคราว</button>
+        <button id="resetView" class="ghost">⟲ รีเซ็ตมุมมอง</button>
+        <button id="reroll" class="ghost">สุ่มผู้ป่วยชุดใหม่</button>
+        <button id="toLive" class="ghost">ต่อ HOSxP จริง</button>
+      </div>
+      <label class="ctl"><span>ความเร็ว</span><input id="speed" type="range" min="0.25" max="3" step="0.25" value="1"><span id="speedVal">1.00×</span></label>
+      <label class="ctl"><span>จำนวนผู้ป่วย</span><input id="count" type="range" min="3" max="8" step="1" value="6"><span id="countVal">6 คน</span></label>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="clockTxt"><span id="simClock">เวลาจำลอง 08:00</span><span id="loopTxt">0:00 / 0:00</span></div>
+    </div>
+    <div id="liveBox" class="hidden">
+      <div id="liveLine"><span id="liveDot"></span><span id="liveTxt">กำลังเชื่อมต่อ…</span></div>
+      <div id="liveErr" class="err hidden"></div>
+      <div class="stats">
+        <div class="stat" id="sTri"><b>0</b><span>รอคัดกรอง</span></div>
+        <div class="stat" id="sDoc"><b>0</b><span>รอพบแพทย์</span></div>
+        <div class="stat" id="sTx"><b>0</b><span>กำลังรักษา</span></div>
+        <div class="stat" id="sAdm"><b>0</b><span>รอขึ้นวอร์ด</span></div>
+      </div>
+      <div id="kpi"></div>
+      <div id="ptList"></div>
+      <div class="row">
+        <button id="btnNow" class="ghost" title="ดึงข้อมูลใหม่ทันที">⟳ อัปเดต</button>
+        <button id="btnView" class="ghost">⟲ มุมมอง</button>
+        <button id="btnSet" class="ghost">⚙ ตั้งค่า</button>
+        <button id="btnSim" class="ghost">ดูแบบจำลอง</button>
+      </div>
+      <a id="homeLnk" href="#" hidden>← กลับหน้ารวมแอป 3 มิติ</a>
+    </div>
+  </div>
+
+  <div id="legend" class="panel">
+    <h2 id="lgTitle">ระดับความเร่งด่วน</h2>
+    <div class="lg"><span class="dot" style="background:#e53935"></span><span id="lg0">แดง · วิกฤต</span><span class="cnt" id="lc0"></span></div>
+    <div class="lg"><span class="dot" style="background:#ec5fa6"></span><span id="lg1">ชมพู · ฉุกเฉินมาก</span><span class="cnt" id="lc1"></span></div>
+    <div class="lg"><span class="dot" style="background:#f4c22b"></span><span id="lg2">เหลือง · เร่งด่วน</span><span class="cnt" id="lc2"></span></div>
+    <div class="lg"><span class="dot" style="background:#3fa45b"></span><span id="lg3">เขียว · ไม่รุนแรง</span><span class="cnt" id="lc3"></span></div>
+    <div class="lg"><span class="dot" style="background:#f2f4f6"></span><span id="lg4">ขาว · ทั่วไป</span><span class="cnt" id="lc4"></span></div>
+    <div class="lg" style="margin-top:6px"><span class="sq" style="background:#1f9e9a"></span>พยาบาลคัดกรอง</div>
+    <div class="lg"><span class="sq" style="background:#fbfdff"></span>แพทย์ (เสื้อกาวน์)</div>
+  </div>
+
+  <div id="feed" class="panel">
+    <h2>เหตุการณ์ล่าสุด</h2>
+    <div id="feedList"></div>
+  </div>
+
+  <div id="info" class="panel hidden" aria-live="polite">
+    <h2><span id="iTitle">ผู้ป่วย</span><button id="closeInfo" class="ghost" aria-label="ปิด">×</button></h2>
+    <div id="infoSim">
+      <div class="kv"><span>อายุ</span><b id="iAge">-</b></div>
+      <div class="kv"><span>อาการนำ</span><b id="iSym">-</b></div>
+      <div class="kv"><span>ระดับคัดกรอง</span><b id="iLevel">-</b></div>
+      <div class="kv"><span>สถานะ</span><b id="iStatus">-</b></div>
+      <div class="kv"><span>เตียง</span><b id="iBed">-</b></div>
+      <div class="kv"><span>คิวแพทย์</span><b id="iQueue">-</b></div>
+    </div>
+    <div id="infoLive" class="hidden"></div>
+  </div>
+
+  <div id="conn" class="dlg hidden" role="dialog" aria-modal="true" aria-labelledby="connTitle">
+    <div class="card">
+      <h2 id="connTitle">เชื่อมต่อ HOSxP</h2>
+      <p id="connMsg">วาง BMS Session ID เพื่อแสดงผู้ป่วยในห้องฉุกเฉินตอนนี้จากตาราง er_regist</p>
+      <label class="f"><span>BMS Session ID</span><input id="sidIn" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label>
+      <div class="row">
+        <button id="connSim" class="ghost">ดูแบบจำลอง</button>
+        <button id="connGo">เชื่อมต่อ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="setDlg" class="dlg hidden" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <div class="card">
+      <h2 id="setTitle">ตั้งค่าโหมดข้อมูลจริง</h2>
+      <label class="f"><span>ดึงข้อมูลใหม่ทุก</span>
+        <select id="optEvery"><option value="10">10 วินาที</option><option value="20">20 วินาที</option><option value="30">30 วินาที</option><option value="60">1 นาที</option></select></label>
+      <label class="f"><span>อยู่ใน ER นานเกินกี่ชั่วโมงถือว่าลืมปิดเวลาออก (0 = ไม่ตัด)</span>
+        <input id="optStale" type="number" min="0" max="72" step="1"></label>
+      <label class="chk"><input id="optHide" type="checkbox">ซ่อน HN และอาการสำคัญ (จอที่คนทั่วไปมองเห็น)</label>
+      <div class="facts" id="setFacts"></div>
+      <div class="row">
+        <button id="setSid" class="ghost">เปลี่ยน Session</button>
+        <button id="setClose">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="prompt" class="hidden">
+    <div class="card panel">
+      <button id="promptPlay">▶ เริ่มเล่นแอนิเมชัน</button>
+      <p>ระบบของคุณตั้งค่าลดการเคลื่อนไหวไว้ จึงหยุดภาพไว้ก่อน กดปุ่มด้านบนหรือ Space เมื่อพร้อม</p>
+    </div>
+  </div>
+</div>
+
+<div id="fallback" class="hidden">
+  <div class="card">
+    <h2>ไม่สามารถแสดงฉาก 3 มิติได้</h2>
+    <p>เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับ WebGL ลองเปิดด้วยเบราว์เซอร์รุ่นใหม่ หรือเปิดการเร่งความเร็วด้วยฮาร์ดแวร์</p>
+  </div>
+</div>
+
+<script>
+  setTimeout(function(){
+    if(!window.__erBoot){
+      var f=document.getElementById('fallback');
+      f.querySelector('p').textContent='โหลดไลบรารี Three.js ไม่สำเร็จ โปรดเปิดไฟล์นี้ผ่านเว็บเซิร์ฟเวอร์ภายในเครื่อง และตรวจสอบว่ามีไฟล์ ./lib/three.module.js อยู่';
+      f.classList.remove('hidden');
+      document.getElementById('ui').classList.add('hidden');
+    }
+  },5000);
+</script>
+
+<script type="module">
+import * as THREE from "./lib/three.module.js";
+window.__erBoot = true;
+
+const $ = (id) => document.getElementById(id);
+function showFallback(msg){
+  const f = $('fallback');
+  if (msg) f.querySelector('p').textContent = msg;
+  f.classList.remove('hidden');
+  $('ui').classList.add('hidden');
+}
+function webglAvailable(){
+  try{
+    const c = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
+  }catch(e){ return false; }
+}
+
+if (!webglAvailable()) {
+  showFallback('เบราว์เซอร์หรืออุปกรณ์นี้ไม่รองรับ WebGL ลองเปิดด้วยเบราว์เซอร์รุ่นใหม่ หรือเปิดการเร่งความเร็วด้วยฮาร์ดแวร์');
+} else {
+  try { main(); }
+  catch (err) { console.error(err); showFallback('เกิดข้อผิดพลาดขณะสร้างฉาก 3 มิติ ลองรีเฟรชหน้าเว็บอีกครั้ง'); }
+}
+
+function main(){
+/* ---------------- helpers ---------------- */
+const clamp = (x,a,b)=> x<a?a:x>b?b:x;
+const clamp01 = (x)=> x<0?0:x>1?1:x;
+const lerp = (a,b,t)=> a+(b-a)*t;
+const easeInOutCubic = (x)=> x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const easeInOutSine = (x)=> -(Math.cos(Math.PI*x)-1)/2;
+const easeInCubic = (x)=> x*x*x;
+const easeOutBack = (x)=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2);};
+const smoothstep = (a,b,x)=>{const t=clamp01((x-a)/(b-a));return t*t*(3-2*t);};
+function dampAngle(a,b,k,dt){
+  const TAU=Math.PI*2; let d=((b-a+Math.PI)%TAU+TAU)%TAU-Math.PI;
+  return a+d*(1-Math.exp(-k*dt));
+}
+function rng(seed){
+  let s = seed>>>0;
+  return function(){ s=(s+0x6D2B79F5)|0; let t=Math.imul(s^(s>>>15),1|s); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
+}
+const UP = new THREE.Vector3(0,1,0);
+const FONT = '"Noto Sans Thai","Leelawadee UI","Tahoma","Sarabun",sans-serif';
+
+/* ---------------- renderer / scene ---------------- */
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+$('app').appendChild(renderer.domElement);
+const canvas = renderer.domElement;
+const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+const scene = new THREE.Scene();
+const BGC = 0xdde7ed;
+scene.background = new THREE.Color(BGC);
+scene.fog = new THREE.Fog(BGC, 50, 105);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 240);
+
+/* lights */
+const hemi = new THREE.HemisphereLight(0xf2f8ff, 0xb8a78e, 1.0);
+scene.add(hemi);
+scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+const sun = new THREE.DirectionalLight(0xfff3e2, 2.1);
+sun.position.set(9, 22, 14);
+sun.target.position.set(-1, 0, 0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left=-27; sc.right=25; sc.top=19; sc.bottom=-19; sc.near=2; sc.far=70;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.025;
+scene.add(sun, sun.target);
+
+/* ---------------- textures ---------------- */
+THREE.Cache.enabled = true;
+const loader = new THREE.TextureLoader();
+function texturedMat(url, rx, ry, params){
+  const m = new THREE.MeshStandardMaterial(params);
+  loader.load(url, (t)=>{
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    t.anisotropy = maxAniso;
+    m.map = t;
+    m.color.set(params.mapTint !== undefined ? params.mapTint : 0xffffff);
+    m.needsUpdate = true;
+  }, undefined, ()=>console.warn('โหลดภาพไม่สำเร็จ:', url));
+  delete params.mapTint;
+  return m;
+}
+const FLOOR_URL='assets/er-floor-vinyl.png', WALL_URL='assets/er-wall-panel.png', CURTAIN_URL='assets/privacy-curtain-fabric.png';
+
+function canvasTex(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=maxAniso; return t;
+}
+function rr(g,x,y,w,h,r){
+  g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+function signTexture(text, bg, fg, cross=false){
+  const w=1024,h=192;
+  return canvasTex(w,h,(g)=>{
+    g.fillStyle=bg; rr(g,6,6,w-12,h-12,40); g.fill();
+    g.lineWidth=6; g.strokeStyle='rgba(0,0,0,0.14)'; g.stroke();
+    let x=w/2;
+    if(cross){
+      const s=h*0.62, cx=h*0.62, cy=h/2;
+      g.fillStyle='#ffffff'; rr(g,cx-s/2,cy-s/2,s,s,s*0.18); g.fill();
+      g.fillStyle=bg; const a=s*0.66,b=s*0.22;
+      g.fillRect(cx-a/2,cy-b/2,a,b); g.fillRect(cx-b/2,cy-a/2,b,a);
+      x=w/2+h*0.35;
+    }
+    g.fillStyle=fg; g.font=`bold ${Math.round(h*0.4)}px ${FONT}`;
+    g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,x,h/2+4);
+  });
+}
+function makeSign(text,bg,fg,w,h,cross){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:signTexture(text,bg,fg,cross),toneMapped:false,transparent:true}));
+  return m;
+}
+const ecgTex = canvasTex(256,128,(g,w,h)=>{
+  g.fillStyle='#06141a'; g.fillRect(0,0,w,h);
+  g.strokeStyle='rgba(60,200,220,0.18)'; g.lineWidth=1;
+  for(let x=0;x<w;x+=16){g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke();}
+  g.strokeStyle='#39f29a'; g.lineWidth=4; g.beginPath();
+  const base=h*0.6;
+  for(let x=0;x<=w;x++){
+    const p=x%128; let y=base;
+    if(p>40&&p<48) y=base-(p-40)*2;
+    else if(p>=48&&p<54) y=base-16+(p-48)*14;
+    else if(p>=54&&p<60) y=base+68-(p-54)*20;
+    else if(p>=60&&p<64) y=base-52+(p-60)*13;
+    else if(p>80&&p<100) y=base-Math.sin((p-80)/20*Math.PI)*10;
+    x===0?g.moveTo(x,y):g.lineTo(x,y);
+  }
+  g.stroke();
+});
+ecgTex.wrapS = THREE.RepeatWrapping;
+
+/* ---------------- materials ---------------- */
+const std=(c,r=0.6,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+const M = {
+  slab: std(0xc3ccd2,0.9),
+  ground: std(0xb4bfc5,1),
+  walk: std(0xa7b1b7,0.95),
+  bumper: std(0x5f9dbd,0.5),
+  frame: std(0xb8c4ce,0.35,0.55),
+  metal: std(0x9aa6ae,0.3,0.75),
+  mattress: std(0xe9eff4,0.85),
+  pillow: std(0xffffff,0.9),
+  blanket: std(0x86b3d1,0.9),
+  dark: std(0x26313b,0.55),
+  deskTop: std(0xeef3f6,0.45),
+  deskBody: std(0x7fa3b8,0.6),
+  seat: std(0x2d7ea3,0.55),
+  white: std(0xf7f9fb,0.6),
+  eye: std(0x1d232a,0.4),
+  shoe: std(0x2c3138,0.6),
+  scrubs: std(0x1f9e9a,0.75),
+  coat: new THREE.MeshStandardMaterial({color:0xfbfdff,roughness:0.75,side:THREE.DoubleSide}),
+  docPants: std(0x2f4358,0.7),
+  pPants: std(0x6f8296,0.8),
+  steth: std(0x1e2a33,0.4,0.3),
+  glass: new THREE.MeshStandardMaterial({color:0xcfeaf5,roughness:0.08,metalness:0.1,transparent:true,opacity:0.32,depthWrite:false}),
+  red: std(0xd32f2f,0.5),
+  yellow: std(0xf4c22b,0.5),
+  pot: std(0xe0d6c8,0.8),
+  leaf: std(0x4f9a5a,0.85),
+  screen: new THREE.MeshStandardMaterial({color:0x0c1820,emissive:0x2aa4c8,emissiveIntensity:0.55,roughness:0.4}),
+  ecg: new THREE.MeshBasicMaterial({map:ecgTex,toneMapped:false}),
+  tire: std(0x1f2328,0.85),
+  ambWhite: std(0xf6f7f8,0.4,0.1),
+  windowDark: std(0x2a3a48,0.15,0.4),
+  lightR: new THREE.MeshStandardMaterial({color:0xff2b2b,emissive:0xff1a1a,emissiveIntensity:1}),
+  lightB: new THREE.MeshStandardMaterial({color:0x2b6bff,emissive:0x1a55ff,emissiveIntensity:1}),
+  clockFace: std(0xffffff,0.5),
+  floor: texturedMat(FLOOR_URL, 8, 5, {color:0xd9dfe2, roughness:0.55}),
+  curtain: texturedMat(CURTAIN_URL, 2, 1.2, {color:0xbfd6e0, roughness:0.92, side:THREE.DoubleSide, mapTint:0xf4f8fa}),
+};
+function wallMat(len){ return texturedMat(WALL_URL, Math.max(1,Math.round(len/4)), 1, {color:0xe7eff4, roughness:0.85}); }
+
+const TRI = [
+  {name:'แดง',  label:'วิกฤต',      hex:'#e53935', c:0xe53935},
+  {name:'ชมพู', label:'ฉุกเฉินมาก',  hex:'#ec5fa6', c:0xec5fa6},
+  {name:'เหลือง',label:'เร่งด่วน',    hex:'#f4c22b', c:0xf4c22b},
+  {name:'เขียว', label:'ไม่รุนแรง',   hex:'#3fa45b', c:0x3fa45b},
+  {name:'ขาว',  label:'ทั่วไป',      hex:'#f2f4f6', c:0xf2f4f6},
+];
+TRI.forEach(t=>{ t.color=new THREE.Color(t.c); });
+const SYM = [
+  ['เจ็บแน่นหน้าอกรุนแรง','หายใจลำบากรุนแรง','หมดสติ ไม่ตอบสนอง'],
+  ['ปวดท้องรุนแรงเฉียบพลัน','แขนขาอ่อนแรงทันที','ไข้สูงร่วมกับชัก'],
+  ['ปวดท้องปานกลาง','แผลฉีกขาดลึก','ไข้สูง อาเจียน'],
+  ['ข้อเท้าแพลง','แผลถลอก','ปวดศีรษะเล็กน้อย'],
+  ['ขอใบรับรองแพทย์','ทำแผลต่อเนื่อง','อาการหวัด'],
+];
+
+/* ---------------- builders ---------------- */
+function mesh(geo,mat,x=0,y=0,z=0,parent=scene,cast=true,recv=true){
+  const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=cast; m.receiveShadow=recv; parent.add(m); return m;
+}
+function box(w,h,d,mat,x,y,z,parent=scene,cast=true){ return mesh(new THREE.BoxGeometry(w,h,d),mat,x,y,z,parent,cast,true); }
+
+/* ground & room shell */
+const groundM = mesh(new THREE.PlaneGeometry(200,200), M.ground, 0,-0.3,0, scene,false,true); groundM.rotation.x=-Math.PI/2;
+box(32.5,0.3,20.5,M.slab,0,-0.16,0,scene,false);
+box(8,0.3,5,M.walk,-20.2,-0.155,5,scene,false);
+const floor = mesh(new THREE.PlaneGeometry(32,20), M.floor, 0,0.001,0, scene,false,true); floor.rotation.x=-Math.PI/2;
+
+const WALL_H=3.6;
+const wallBack = new THREE.Group(), wallLeft = new THREE.Group(), wallRight = new THREE.Group();
+scene.add(wallBack, wallLeft, wallRight);
+box(32.5,WALL_H,0.25,wallMat(32),0,WALL_H/2,-10.1,wallBack);
+box(0.25,WALL_H,20,wallMat(20),16.1,WALL_H/2,0,wallRight);
+box(0.25,WALL_H,13.4,wallMat(13.4),-16.1,WALL_H/2,-3.3,wallLeft);
+box(0.25,WALL_H,3.4,wallMat(4),-16.1,WALL_H/2,8.3,wallLeft);
+box(0.25,0.9,3.2,wallMat(4),-16.1,WALL_H-0.45,5,wallLeft);
+box(32,0.12,0.05,M.bumper,0,0.95,-9.95,wallBack,false);
+box(0.05,0.12,20,M.bumper,15.95,0.95,0,wallRight,false);
+box(0.05,0.12,13.2,M.bumper,-15.95,0.95,-3.3,wallLeft,false);
+box(32.5,0.08,0.12,M.dark,0,0.0,10.2,scene,false);
+
+/* sliding glass doors */
+const doorL = box(0.05,2.6,1.6,M.glass,-16.3,1.3,4.2,scene,false);
+const doorR = box(0.05,2.6,1.6,M.glass,-16.3,1.3,5.8,scene,false);
+[doorL,doorR].forEach(d=>{ box(0.07,0.08,1.6,M.metal,0,1.27,0,d,false); box(0.07,0.08,1.6,M.metal,0,-1.27,0,d,false); });
+
+/* outside canopy + ambulance */
+box(6.4,0.22,5.4,M.white,-19.6,3.35,5);
+const postGeo=new THREE.CylinderGeometry(0.09,0.09,3.35,10);
+[[-22.5,2.6],[-22.5,7.4]].forEach(p=>mesh(postGeo,M.metal,p[0],1.53,p[1]));
+const erSign = makeSign('ห้องฉุกเฉิน','#d32f2f','#ffffff',4.2,0.78,true); erSign.position.set(-19.6,3.86,7.72); scene.add(erSign);
+const erSign2 = makeSign('ห้องฉุกเฉิน','#d32f2f','#ffffff',3.2,0.6,true); erSign2.position.set(-16.26,3.05,5); erSign2.rotation.y=-Math.PI/2; wallLeft.add(erSign2);
+
+const amb = new THREE.Group(); amb.position.set(-22.2,-0.3,-2.6); amb.rotation.y=0.35; scene.add(amb);
+box(3.0,1.95,1.95,M.ambWhite,0.45,1.42,0,amb);
+box(1.25,1.45,1.9,M.ambWhite,-1.65,1.15,0,amb);
+box(0.05,0.62,1.6,M.windowDark,-2.28,1.5,0,amb,false);
+box(4.3,0.2,1.97,M.red,-0.18,1.05,0,amb,false);
+box(0.3,0.08,1.97,M.red,0.9,1.85,0,amb,false);
+const wheelGeo=new THREE.CylinderGeometry(0.38,0.38,0.26,16); wheelGeo.rotateX(Math.PI/2);
+[[-1.5,0.95],[-1.5,-0.95],[1.2,0.95],[1.2,-0.95]].forEach(w=>mesh(wheelGeo,M.tire,w[0],0.38,w[1],amb));
+const lbGeo=new THREE.BoxGeometry(0.3,0.14,0.55);
+const ambRed=mesh(lbGeo,M.lightR,-1.65,1.95,-0.32,amb,false,false);
+const ambBlue=mesh(lbGeo,M.lightB,-1.65,1.95,0.32,amb,false,false);
+box(0.05,0.5,0.5,M.red,-0.4,1.6,0.985,amb,false).rotation.x=0;
+
+/* zone floor plates + signs */
+function zonePlate(x0,x1,z0,z1,level){
+  const mat=new THREE.MeshStandardMaterial({color:TRI[level].c,transparent:true,opacity:level===4?0.5:0.26,roughness:0.8,polygonOffset:true,polygonOffsetFactor:-1});
+  const p=mesh(new THREE.PlaneGeometry(x1-x0,z1-z0),mat,(x0+x1)/2,0.006,(z0+z1)/2,scene,false,true); p.rotation.x=-Math.PI/2;
+  return p;
+}
+function stripe(x,z,w,d,level){
+  const mat=new THREE.MeshStandardMaterial({color:level===4?0xc9d1d8:TRI[level].c,roughness:0.6,polygonOffset:true,polygonOffsetFactor:-2});
+  const p=mesh(new THREE.PlaneGeometry(w,d),mat,x,0.008,z,scene,false,true); p.rotation.x=-Math.PI/2;
+}
+zonePlate(-11.75,-4.75,-9.95,-6.6,0); stripe(-8.25,-6.5,7,0.14,0);
+zonePlate(-4.75,2.25,-9.95,-6.6,1);   stripe(-1.25,-6.5,7,0.14,1);
+zonePlate(2.25,9.25,-9.95,-6.6,2);    stripe(5.75,-6.5,7,0.14,2);
+zonePlate(12.75,15.95,-5.75,1.25,3);  stripe(12.65,-2.25,0.14,7,3);
+zonePlate(12.75,15.95,1.25,8.25,4);   stripe(12.65,4.75,0.14,7,4);
+[[-8.25,0],[-1.25,1],[5.75,2]].forEach(([x,l])=>{
+  const s=makeSign(`โซนสี${TRI[l].name} · ${TRI[l].label}`,TRI[l].hex,l===2?'#2a2200':'#ffffff',3.3,0.62);
+  s.position.set(x,2.95,-9.96); wallBack.add(s);
+});
+[[-2.25,3],[4.75,4]].forEach(([z,l])=>{
+  const s=makeSign(`โซนสี${TRI[l].name} · ${TRI[l].label}`,l===4?'#f7f9fb':TRI[l].hex,l===4?'#22313c':'#ffffff',3.3,0.62);
+  s.position.set(15.96,2.95,z); s.rotation.y=-Math.PI/2; wallRight.add(s);
+});
+
+/* curtains */
+const curtainGeo=(()=>{
+  const g=new THREE.PlaneGeometry(3.3,2.0,36,1); const p=g.attributes.position;
+  for(let i=0;i<p.count;i++){ p.setZ(i,0.055*Math.sin(p.getX(i)*9.5)); }
+  g.computeVertexNormals(); return g;
+})();
+const railGeo=new THREE.BoxGeometry(0.04,0.04,3.4);
+[-11.75,-8.25,-4.75,-1.25,2.25,5.75,9.25].forEach(x=>{
+  const c=mesh(curtainGeo,M.curtain,x,1.32,-8.27); c.rotation.y=Math.PI/2;
+  mesh(railGeo,M.metal,x,2.36,-8.27,scene,false,false);
+});
+[-5.75,-2.25,1.25,4.75,8.25].forEach(z=>{
+  mesh(curtainGeo,M.curtain,14.33,1.32,z);
+  const r=mesh(railGeo,M.metal,14.33,2.36,z,scene,false,false); r.rotation.y=Math.PI/2;
+});
+
+/* beds */
+const BG = {
+  frame:new THREE.BoxGeometry(1.0,0.14,2.1), matt:new THREE.BoxGeometry(0.94,0.16,2.0),
+  pillow:new THREE.BoxGeometry(0.66,0.11,0.34), blanket:new THREE.BoxGeometry(0.98,0.05,1.05),
+  headb:new THREE.BoxGeometry(1.02,0.55,0.06), footb:new THREE.BoxGeometry(1.02,0.32,0.05),
+  band:new THREE.BoxGeometry(1.04,0.08,0.075),
+  leg:new THREE.CylinderGeometry(0.03,0.03,0.42,8), wheel:new THREE.CylinderGeometry(0.055,0.055,0.04,10).rotateZ(Math.PI/2),
+  rail:new THREE.BoxGeometry(0.03,0.05,1.1), pole:new THREE.CylinderGeometry(0.02,0.02,1.7,8),
+  mon:new THREE.BoxGeometry(0.44,0.32,0.06), scr:new THREE.PlaneGeometry(0.38,0.25), bag:new THREE.BoxGeometry(0.14,0.22,0.05),
+};
+const bandMats = TRI.map(t=>new THREE.MeshStandardMaterial({color:t.c,emissive:t.c,emissiveIntensity:0.15,roughness:0.5}));
+function makeBed(level){
+  const g=new THREE.Group();
+  mesh(BG.frame,M.frame,0,0.5,0,g); mesh(BG.matt,M.mattress,0,0.65,0,g);
+  mesh(BG.pillow,M.pillow,0,0.78,-0.78,g); mesh(BG.blanket,M.blanket,0,0.75,0.45,g);
+  mesh(BG.headb,M.frame,0,0.82,-1.06,g); mesh(BG.footb,M.frame,0,0.66,1.06,g);
+  mesh(BG.band,bandMats[level],0,1.06,-1.06,g,false);
+  for(const sx of [-0.43,0.43]) for(const sz of [-0.95,0.95]){ mesh(BG.leg,M.metal,sx,0.27,sz,g,true,false); mesh(BG.wheel,M.dark,sx,0.055,sz,g,false,false); }
+  for(const sx of [-0.5,0.5]) mesh(BG.rail,M.metal,sx,0.87,-0.2,g);
+  if(level<=1){
+    mesh(BG.pole,M.metal,0.74,0.85,-1.0,g);
+    mesh(BG.mon,M.dark,0.74,1.62,-1.0,g);
+    mesh(BG.scr,M.ecg,0.74,1.62,-0.968,g,false,false);
+  }
+  if(level<=2){ mesh(BG.pole,M.metal,-0.72,0.85,-0.95,g); mesh(BG.bag,M.glass,-0.72,1.55,-0.95,g,false,false); }
+  return g;
+}
+const beds=[];
+function addBed(cx,cz,h,s,rotY,level,k){
+  const g=makeBed(level); g.position.set(cx,0,cz); g.rotation.y=rotY; scene.add(g);
+  const b={level, name:`${TRI[level].name} ${k}`, c:new THREE.Vector3(cx,0,cz), h, s};
+  b.patPt={x:cx+s.x*0.95, z:cz+s.z*0.95};
+  b.docPt={x:cx-s.x*0.95, z:cz-s.z*0.95};
+  if(h.z<0){ b.patAisle={x:b.patPt.x,z:-6.2}; b.docAisle={x:b.docPt.x,z:-6.2}; }
+  else { b.patAisle={x:12.4,z:b.patPt.z}; b.docAisle={x:12.4,z:b.docPt.z}; }
+  const X=new THREE.Vector3().crossVectors(h,UP);
+  b.qLie=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X,h,UP));
+  b.lieX=cx-h.x*0.92; b.lieZ=cz-h.z*0.92; b.lieY=0.9;
+  beds.push(b);
+}
+[-10,-6.5,-3,0.5,4,7.5].forEach((x,i)=>{ const lv=[0,0,1,1,2,2][i]; addBed(x,-8.6,new THREE.Vector3(0,0,-1),new THREE.Vector3(1,0,0),0,lv,(i%2)+1); });
+[-4,-0.5,3,6.5].forEach((z,i)=>{ const lv=[3,3,4,4][i]; addBed(14.6,z,new THREE.Vector3(1,0,0),new THREE.Vector3(0,0,1),-Math.PI/2,lv,(i%2)+1); });
+
+/* chairs */
+const CH={seat:new THREE.BoxGeometry(0.5,0.07,0.5), back:new THREE.BoxGeometry(0.5,0.5,0.06), leg:new THREE.CylinderGeometry(0.022,0.022,0.42,6)};
+function makeChair(x,z,rotY,mat=M.seat){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=rotY; scene.add(g);
+  mesh(CH.seat,mat,0,0.45,0,g); mesh(CH.back,mat,0,0.72,0.24,g);
+  for(const a of [-0.21,0.21]) for(const b of [-0.21,0.21]) mesh(CH.leg,M.metal,a,0.21,b,g,true,false);
+  return g;
+}
+const SEATS=[]; for(let k=0;k<8;k++){ const x=-13.4+k*1.0; SEATS.push(x); makeChair(x,7.18,0); }
+box(8.2,0.05,0.12,M.metal,-9.9,0.2,7.4,scene,false);
+const waitSign=makeSign('ที่นั่งรอซักประวัติ','#0f6e8c','#ffffff',2.6,0.48); waitSign.position.set(-9.9,1.35,7.52); scene.add(waitSign);
+
+/* triage desk */
+const TRI_SPOT={x:-9,z:4.45}, NURSE_POS={x:-9,z:1.95};
+box(2.8,0.06,0.9,M.deskTop,-9,0.79,3.0);
+box(0.06,0.76,0.86,M.deskBody,-10.37,0.38,3.0); box(0.06,0.76,0.86,M.deskBody,-7.63,0.38,3.0);
+box(2.74,0.5,0.04,M.deskBody,-9,0.5,3.42);
+const tMon=box(0.56,0.36,0.04,M.dark,-9.45,1.12,2.92); mesh(new THREE.CylinderGeometry(0.025,0.025,0.2,8),M.metal,-9.45,0.9,2.95);
+const tScr=mesh(new THREE.PlaneGeometry(0.5,0.3),M.screen,-9.45,1.12,2.898,scene,false,false); tScr.rotation.y=Math.PI;
+box(0.42,0.02,0.14,M.dark,-9.45,0.83,2.7);
+box(0.24,0.02,0.32,M.white,-8.6,0.83,2.85);
+box(0.3,0.2,0.22,M.white,-8.0,0.92,3.1); const bpS=mesh(new THREE.PlaneGeometry(0.2,0.1),M.screen,-8.0,0.95,3.212,scene,false,false);
+makeChair(NURSE_POS.x,NURSE_POS.z-0.05,Math.PI,M.scrubs);
+makeChair(TRI_SPOT.x,TRI_SPOT.z+0.06,0);
+const triSign=makeSign('จุดคัดกรอง / ซักประวัติ','#1f9e9a','#ffffff',2.6,0.5); triSign.position.set(-9,2.75,3.0); scene.add(triSign);
+const wireGeo=new THREE.CylinderGeometry(0.008,0.008,0.9,4);
+mesh(wireGeo,M.metal,-10.1,3.45,3.0,scene,false,false); mesh(wireGeo,M.metal,-7.9,3.45,3.0,scene,false,false);
+
+/* doctor / nurse station */
+const HOME={x:3.5,z:4.9};
+box(4,1.05,1.2,M.deskBody,3.5,0.525,6.5);
+box(4.2,0.06,1.4,M.deskTop,3.5,1.08,6.5);
+[2.6,4.4].forEach(x=>{ box(0.5,0.32,0.04,M.dark,x,1.36,6.3); const s=mesh(new THREE.PlaneGeometry(0.44,0.26),M.screen,x,1.36,6.278,scene,false,false); s.rotation.y=Math.PI; });
+const stSign=makeSign('เคาน์เตอร์พยาบาล · แพทย์','#0f6e8c','#ffffff',2.8,0.5); stSign.position.set(3.5,0.66,7.115); scene.add(stSign);
+
+/* crash cart, plant, clock */
+box(0.8,0.95,0.55,M.red,-13.4,0.5,-9.2); box(0.84,0.04,0.6,M.dark,-13.4,0.99,-9.2);
+box(0.34,0.2,0.26,M.yellow,-13.5,1.11,-9.2);
+mesh(new THREE.CylinderGeometry(0.28,0.22,0.5,14),M.pot,-15.3,0.25,9.3);
+mesh(new THREE.SphereGeometry(0.5,14,10),M.leaf,-15.3,0.95,9.3);
+mesh(new THREE.SphereGeometry(0.36,12,9),M.leaf,-15.1,1.35,9.15);
+const clock=new THREE.Group(); clock.position.set(12.3,2.6,-9.93); wallBack.add(clock);
+const face=mesh(new THREE.CylinderGeometry(0.42,0.42,0.05,32),M.clockFace,0,0,0.02,clock,false,false); face.rotation.x=Math.PI/2;
+const rim=mesh(new THREE.TorusGeometry(0.42,0.035,8,32),M.dark,0,0,0.04,clock,false,false);
+const hourHand=new THREE.Group(), minHand=new THREE.Group(); hourHand.position.z=0.06; minHand.position.z=0.07; clock.add(hourHand,minHand);
+box(0.04,0.22,0.01,M.dark,0,0.1,0,hourHand,false); box(0.025,0.34,0.01,M.dark,0,0.16,0,minHand,false);
+for(let i=0;i<12;i++){ const a=i/12*Math.PI*2; box(0.02,0.06,0.01,M.dark,Math.sin(a)*0.34,Math.cos(a)*0.34,0.05,clock,false).rotation.z=-a; }
+
+/* ---------------- people ---------------- */
+const PG = {
+  leg:new THREE.CapsuleGeometry(0.085,0.62,4,10).translate(0,-0.4,0),
+  arm:new THREE.CapsuleGeometry(0.062,0.5,4,10).translate(0,-0.3,0),
+  torso:new THREE.CapsuleGeometry(0.2,0.36,6,14),
+  head:new THREE.SphereGeometry(0.16,20,14),
+  hair:new THREE.SphereGeometry(0.168,20,10,0,Math.PI*2,0,Math.PI*0.5),
+  eye:new THREE.SphereGeometry(0.022,8,6),
+  hand:new THREE.SphereGeometry(0.06,10,8),
+  shoe:new THREE.BoxGeometry(0.13,0.08,0.24),
+  coat:new THREE.CylinderGeometry(0.225,0.3,0.74,16,1,true),
+  steth:new THREE.TorusGeometry(0.2,0.014,6,24),
+  cap:new THREE.CylinderGeometry(0.13,0.15,0.09,16),
+  marker:new THREE.OctahedronGeometry(0.13),
+  ring:new THREE.RingGeometry(0.42,0.52,40).rotateX(-Math.PI/2),
+};
+const SKINS=[0xf1c9a5,0xd9a47a,0xa8714a].map(c=>std(c,0.7));
+const HAIRS=[0x2b2220,0x5a3a22,0x9a9a9a,0x161616].map(c=>std(c,0.8));
+function makePerson(o){
+  const g=new THREE.Group(), body=new THREE.Group(); g.add(body);
+  const add=(geo,mat,x,y,z,parent=body)=>mesh(geo,mat,x,y,z,parent,true,true);
+  const torso=add(PG.torso,o.shirt,0,1.2,0);
+  const head=add(PG.head,o.skin,0,1.7,0);
+  const hair=add(PG.hair,o.hair,0,0.015,-0.012,head); hair.rotation.x=-0.35;
+  add(PG.eye,M.eye,-0.058,0.02,0.145,head).castShadow=false;
+  add(PG.eye,M.eye,0.058,0.02,0.145,head).castShadow=false;
+  const limb=(geo,mat,x,y)=>{const p=new THREE.Group(); p.position.set(x,y,0); body.add(p); add(geo,mat,0,0,0,p); return p;};
+  const legL=limb(PG.leg,o.pants,-0.1,0.84), legR=limb(PG.leg,o.pants,0.1,0.84);
+  add(PG.shoe,M.shoe,0,-0.79,0.04,legL); add(PG.shoe,M.shoe,0,-0.79,0.04,legR);
+  const armL=limb(PG.arm,o.shirt,-0.27,1.44), armR=limb(PG.arm,o.shirt,0.27,1.44);
+  add(PG.hand,o.skin,0,-0.6,0,armL); add(PG.hand,o.skin,0,-0.6,0,armR);
+  if(o.kind==='doctor'){
+    add(PG.coat,o.shirt,0,1.09,0);
+    const st=add(PG.steth,M.steth,0,1.42,0.02); st.rotation.x=Math.PI/2+0.45;
+    add(PG.eye,M.metal,0.07,1.22,0.2);
+  }
+  if(o.kind==='nurse') add(PG.cap,M.white,0,0.15,-0.01,head);
+  scene.add(g);
+  return {g,body,head,torso,legL,legR,armL,armR,yaw:0};
+}
+
+const NEUTRAL=new THREE.Color(0x9aa9b6);
+function labelTex(text,bg,fg){
+  return canvasTex(160,80,(g,w,h)=>{
+    g.fillStyle=bg; rr(g,4,4,w-8,h-8,30); g.fill();
+    g.lineWidth=4; g.strokeStyle='rgba(16,34,46,0.35)'; g.stroke();
+    g.fillStyle=fg; g.font=`bold 40px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,w/2,h/2+2);
+  });
+}
+const pool=[];
+/* โหมดข้อมูลจริงมีคนไข้ได้มากกว่า 8 คน → สร้างเพิ่มทีละคนเมื่อจำเป็น (makeEntry) */
+function makeEntry(i){
+  const gown=new THREE.MeshStandardMaterial({color:NEUTRAL.clone(),roughness:0.8});
+  const P=makePerson({shirt:gown,pants:M.pPants,skin:SKINS[(i*2+1)%3],hair:HAIRS[i%4]});
+  P.g.traverse(o=>{o.userData.pid=i;});
+  P.gown=gown;
+  P.marker=mesh(PG.marker,new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xffffff,emissiveIntensity:0.35,roughness:0.3}),0,0,0,scene,false,false);
+  P.labelMat=new THREE.SpriteMaterial({map:labelTex('#'+(i+1),'rgba(255,255,255,0.94)','#10222e'),depthTest:false,transparent:true});
+  P.doneMat=new THREE.SpriteMaterial({map:labelTex('✓ #'+(i+1),'#2e7d32','#ffffff'),depthTest:false,transparent:true});
+  P.sprite=new THREE.Sprite(P.labelMat); P.sprite.scale.set(0.6,0.3,1); P.sprite.renderOrder=10; scene.add(P.sprite);
+  P.pulse=mesh(PG.ring,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}),0,0.03,0,scene,false,false);
+  P.guide=mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.8,depthWrite:false}),0,0,0,scene,false,false);
+  P.guideSeg=0; P.wasHidden=true;
+  return P;
+}
+for(let i=0;i<8;i++) pool.push(makeEntry(i));
+const nurse=makePerson({shirt:M.scrubs,pants:M.scrubs,skin:SKINS[1],hair:HAIRS[0],kind:'nurse'});
+nurse.g.position.set(NURSE_POS.x,0,NURSE_POS.z);
+const doctor=makePerson({shirt:M.coat,pants:M.docPants,skin:SKINS[0],hair:HAIRS[1],kind:'doctor'});
+doctor.yaw=Math.PI;
+
+const selRing=mesh(PG.ring,new THREE.MeshBasicMaterial({color:0x14b8d8,transparent:true,opacity:0.9,depthWrite:false}),0,0.035,0,scene,false,false);
+selRing.visible=false;
+
+/* ---------------- paths ---------------- */
+function makePath(pts){
+  const P=[];
+  for(const q of pts){ const v=new THREE.Vector2(q[0],q[1]); if(!P.length||P[P.length-1].distanceTo(v)>1e-4) P.push(v); }
+  const cum=[0]; for(let i=1;i<P.length;i++) cum.push(cum[i-1]+P[i].distanceTo(P[i-1]));
+  return {P,cum,len:cum[cum.length-1]};
+}
+function samplePath(path,s,out){
+  const {P,cum}=path;
+  if(P.length===1){ out.x=P[0].x; out.z=P[0].y; out.dx=0; out.dz=0; return out; }
+  let i=1; while(i<P.length-1 && cum[i]<s) i++;
+  const a=P[i-1], b=P[i], seg=cum[i]-cum[i-1], u=seg>0?clamp01((s-cum[i-1])/seg):0;
+  out.x=a.x+(b.x-a.x)*u; out.z=a.y+(b.y-a.y)*u; out.dx=b.x-a.x; out.dz=b.y-a.y;
+  return out;
+}
+const walkEase=(u)=>0.7*u+0.3*easeInOutSine(u);
+function walkOn(path,u,out){
+  const s=walkEase(clamp01(u))*path.len;
+  samplePath(path,s,out);
+  out.walk=true; out.phase=s*4.4;
+  if(out.dx||out.dz) out.yaw=Math.atan2(out.dx,out.dz);
+  return out;
+}
+class PolyCurve extends THREE.Curve{
+  constructor(path,y){ super(); this.path=path; this.y=y; this._o={}; }
+  getPoint(t,target=new THREE.Vector3()){ samplePath(this.path,t*this.path.len,this._o); return target.set(this._o.x,this.y,this._o.z); }
+}
+
+/* ---------------- schedule (choreography) ---------------- */
+const SPEED_P=1.9, SPEED_D=2.7, TRI_T=2.0, LIE_T=0.9, GAP=2.1;
+const EXAM_T=[2.6,2.3,2.0,1.6,1.4];
+let N=6, seed=1, sched=null, L=30;
+
+function buildSchedule(){
+  const R=rng(seed*9301+17);
+  let order;
+  if(seed===1) order=[2,3,0,4,1,2,0,3];
+  else { order=[0,0,1,1,2,2,3,3,4,4]; for(let i=order.length-1;i>0;i--){ const j=Math.floor(R()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; } }
+  order=order.slice(0,N);
+  const used=[0,0,0,0,0], events=[], list=[];
+  let prevTriEnd=-99;
+  for(let i=0;i<N;i++){
+    const lv=order[i];
+    const p={id:i+1,idx:i,level:lv,age:18+Math.floor(R()*70),symptom:SYM[lv][Math.floor(R()*3)]};
+    p.bed=beds.filter(b=>b.level===lv)[used[lv]++];
+    p.sx=SEATS[i];
+    p.arr=0.6+i*GAP;
+    p.inPath=makePath([[-21.5,5],[-15.4,5],[p.sx,6.1],[p.sx,7.1]]);
+    p.tSeat=p.arr+p.inPath.len/SPEED_P;
+    p.triPath=makePath([[p.sx,7.1],[p.sx,6.1],[-9,5.3],[TRI_SPOT.x,TRI_SPOT.z]]);
+    const wd=p.triPath.len/SPEED_P;
+    p.tCall=Math.max(p.tSeat+0.9, prevTriEnd+0.6-wd);
+    p.tTriStart=p.tCall+wd;
+    p.tTriEnd=p.tTriStart+TRI_T;
+    prevTriEnd=p.tTriEnd;
+    p.bedPath=makePath([[TRI_SPOT.x,TRI_SPOT.z],[-6.6,4.7],[-4,1],[p.bed.patAisle.x,p.bed.patAisle.z],[p.bed.patPt.x,p.bed.patPt.z]]);
+    p.tBed=p.tTriEnd+p.bedPath.len/SPEED_P;
+    p.tLie=p.tBed+LIE_T;
+    const T=TRI[lv];
+    events.push({t:p.arr,c:'#9aa9b6',h:`ผู้ป่วย #${p.id} เดินเข้าห้องฉุกเฉิน`});
+    events.push({t:p.tTriStart,c:'#1f9e9a',h:`พยาบาลเริ่มซักประวัติผู้ป่วย #${p.id}`});
+    events.push({t:p.tTriEnd,c:T.hex,h:`#${p.id} คัดกรองได้ <b>สี${T.name}</b> (${T.label}) → เตียง${p.bed.name}`});
+    list.push(p);
+  }
+  /* doctor rounds: most severe first */
+  const segs=[]; let dT=0, dCur={x:HOME.x,z:HOME.z}, dAisle=null;
+  const pending=list.slice();
+  while(pending.length){
+    let avail=pending.filter(p=>p.tLie<=dT+1e-6);
+    if(!avail.length){ dT=Math.min(...pending.map(p=>p.tLie)); avail=pending.filter(p=>p.tLie<=dT+1e-6); }
+    avail.sort((a,b)=>a.level-b.level||a.tLie-b.tLie);
+    const p=avail[0];
+    const skipped=avail.filter(q=>q!==p&&q.tLie<p.tLie&&q.level>p.level).sort((a,b)=>a.tLie-b.tLie)[0];
+    const pts=[[dCur.x,dCur.z]]; if(dAisle) pts.push([dAisle.x,dAisle.z]);
+    pts.push([p.bed.docAisle.x,p.bed.docAisle.z],[p.bed.docPt.x,p.bed.docPt.z]);
+    const path=makePath(pts), dur=path.len/SPEED_D;
+    segs.push({type:'walk',t0:dT,t1:dT+dur,path});
+    dT+=dur;
+    p.tExamStart=dT; p.tExamEnd=dT+EXAM_T[p.level];
+    segs.push({type:'exam',t0:dT,t1:p.tExamEnd,x:p.bed.docPt.x,z:p.bed.docPt.z,yaw:Math.atan2(p.bed.s.x,p.bed.s.z),p});
+    const T=TRI[p.level];
+    events.push({t:p.tExamStart,c:T.hex,h: skipped
+      ? `แพทย์ตรวจ #${p.id} (สี${T.name}) ก่อน #${skipped.id} (สี${TRI[skipped.level].name}) เพราะอาการหนักกว่า`
+      : `แพทย์เริ่มตรวจ #${p.id} (สี${T.name} · ${T.label})`});
+    dT=p.tExamEnd; dCur=p.bed.docPt; dAisle=p.bed.docAisle;
+    pending.splice(pending.indexOf(p),1);
+  }
+  const hp=makePath([[dCur.x,dCur.z],[dAisle.x,dAisle.z],[HOME.x,HOME.z]]);
+  segs.push({type:'walk',t0:dT,t1:dT+hp.len/SPEED_D,path:hp,home:true});
+  dT+=hp.len/SPEED_D;
+  events.push({t:dT,c:'#0f6e8c',h:'แพทย์ตรวจครบทุกเตียง กลับเคาน์เตอร์'});
+  const loopLen=Math.max(22,dT+2.8);
+  events.push({t:loopLen-1.6,c:'#0f6e8c',h:'ครบรอบการจำลอง — เริ่มรอบใหม่'});
+  events.sort((a,b)=>a.t-b.t);
+  return {patients:list,docSegs:segs,events,L:loopLen};
+}
+
+function rebuild(){
+  sched=buildSchedule(); L=sched.L;
+  sched.patients.forEach((p,i)=>{
+    const E=pool[i], T=TRI[p.level];
+    E.marker.material.color.copy(T.color); E.marker.material.emissive.copy(T.color);
+    E.pulse.material.color.copy(T.color);
+    E.guide.material.color.copy(p.level===4?new THREE.Color(0x9fb2c0):T.color);
+    const seg=Math.max(24,Math.round(p.bedPath.len*5));
+    E.guide.geometry.dispose();
+    E.guide.geometry=new THREE.TubeGeometry(new PolyCurve(p.bedPath,0.05),seg,0.05,5,false);
+    E.guideSeg=seg; E.wasHidden=true;
+  });
+  tl=0; feedCount=-1;
+  $('summary').textContent=`ผู้ป่วย ${N} คน · รอบละ ${Math.round(L)} วินาที (1 วินาที = 1 นาทีจำลอง)`;
+  if(selected>=N) deselect();
+}
+
+/* ---------------- per-frame posing ---------------- */
+const pose={};
+function sitRamp(t,a,b){ return smoothstep(0,1,(t-a)/0.35)*smoothstep(0,1,(b-t)/0.35); }
+function patientPose(p,t,o){
+  o.visible=t>=p.arr; o.sit=0; o.walk=false; o.lie=0; o.phase=0;
+  if(!o.visible) return o;
+  if(t<p.tSeat) walkOn(p.inPath,(t-p.arr)/(p.tSeat-p.arr),o);
+  else if(t<p.tCall){ o.x=p.sx; o.z=7.1; o.yaw=Math.PI; o.sit=sitRamp(t,p.tSeat,p.tCall); }
+  else if(t<p.tTriStart) walkOn(p.triPath,(t-p.tCall)/(p.tTriStart-p.tCall),o);
+  else if(t<p.tTriEnd){ o.x=TRI_SPOT.x; o.z=TRI_SPOT.z; o.yaw=Math.PI; o.sit=sitRamp(t,p.tTriStart,p.tTriEnd); }
+  else if(t<p.tBed) walkOn(p.bedPath,(t-p.tTriEnd)/(p.tBed-p.tTriEnd),o);
+  else { const b=p.bed; o.x=b.patPt.x; o.z=b.patPt.z; o.yaw=Math.atan2(-b.s.x,-b.s.z); o.lie=Math.max(1e-4,easeInOutCubic(clamp01((t-p.tBed)/LIE_T))); }
+  return o;
+}
+function hideEntry(E){ E.g.visible=false; E.marker.visible=false; E.sprite.visible=false; E.pulse.visible=false; E.guide.visible=false; }
+const tmpV=new THREE.Vector3(), qA=new THREE.Quaternion();
+
+function updatePatients(t,dt){
+  const fadeK=1-easeInCubic(clamp01((t-(L-1.5))/1.2));
+  let doorDist=99;
+  for(let i=0;i<pool.length;i++){
+    const E=pool[i], p=sched.patients[i];
+    if(!p){ hideEntry(E); E.wasHidden=true; continue; }
+    const o=patientPose(p,t,pose);
+    if(!o.visible||fadeK<=0.002){ hideEntry(E); E.wasHidden=true; continue; }
+    E.g.visible=true;
+    if(E.wasHidden){ E.yaw=o.yaw; E.wasHidden=false; }
+    if(o.lie>0){
+      const b=p.bed; E.yaw=o.yaw;
+      qA.setFromAxisAngle(UP,o.yaw); E.g.quaternion.slerpQuaternions(qA,b.qLie,o.lie);
+      E.g.position.set(lerp(b.patPt.x,b.lieX,o.lie), lerp(0,b.lieY,o.lie)+Math.sin(Math.PI*o.lie)*0.35, lerp(b.patPt.z,b.lieZ,o.lie));
+    } else {
+      E.yaw=dampAngle(E.yaw,o.yaw,9,dt);
+      E.g.quaternion.setFromAxisAngle(UP,E.yaw);
+      E.g.position.set(o.x,0,o.z);
+    }
+    const sw=o.walk?Math.sin(o.phase):0, sit=o.sit;
+    E.body.position.y=-0.36*sit+(o.walk?Math.abs(Math.cos(o.phase))*0.03:0);
+    E.legL.rotation.x= sw*0.55*(1-sit)-1.45*sit;
+    E.legR.rotation.x=-sw*0.55*(1-sit)-1.45*sit;
+    E.armL.rotation.x=-sw*0.45-0.45*sit;
+    E.armR.rotation.x= sw*0.45-0.45*sit;
+    E.head.rotation.x=0;
+    E.g.scale.setScalar(fadeK);
+    if(o.lie===0) doorDist=Math.min(doorDist,Math.hypot(o.x+16,o.z-5));
+
+    E.gown.color.copy(NEUTRAL).lerp(TRI[p.level].color,clamp01((t-(p.tTriEnd-0.9))/0.7));
+    E.g.updateMatrixWorld(true);
+    E.head.getWorldPosition(tmpV);
+    const rev=clamp01((t-(p.tTriEnd-0.6))/0.5);
+    if(rev>0){
+      E.marker.visible=true;
+      E.marker.position.set(tmpV.x,tmpV.y+0.42*fadeK,tmpV.z);
+      E.marker.scale.setScalar(Math.max(0.001,easeOutBack(rev))*fadeK);
+      E.marker.rotation.y=t*2.2;
+      const ex=t>=p.tExamStart&&t<p.tExamEnd;
+      E.marker.material.emissiveIntensity=ex?0.6+0.7*Math.abs(Math.sin(t*7)):0.35;
+    } else E.marker.visible=false;
+    E.sprite.visible=true;
+    E.sprite.material=t>=p.tExamEnd?E.doneMat:E.labelMat;
+    E.sprite.position.set(tmpV.x,tmpV.y+(rev>0?0.8:0.45)*fadeK,tmpV.z);
+    E.sprite.scale.set(0.6*fadeK,0.3*fadeK,1);
+
+    const pu=(t-(p.tTriEnd-0.4))/1.3;
+    if(pu>0&&pu<1){ E.pulse.visible=true; E.pulse.position.set(TRI_SPOT.x,0.03,TRI_SPOT.z); E.pulse.scale.setScalar(0.6+2.4*pu); E.pulse.material.opacity=(1-pu)*0.85; }
+    else E.pulse.visible=false;
+
+    const gs=p.tTriEnd-0.2;
+    if(t>=gs&&t<p.tBed+0.6){
+      const reveal=clamp01((t-gs)/0.8);
+      const walked=t<p.tTriEnd?0:walkEase(clamp01((t-p.tTriEnd)/(p.tBed-p.tTriEnd)));
+      const a=Math.floor(walked*E.guideSeg), b=Math.ceil(reveal*E.guideSeg);
+      E.guide.geometry.setDrawRange(a*30,Math.max(0,b-a)*30);
+      E.guide.material.opacity=0.85*(t>p.tBed?1-(t-p.tBed)/0.6:1)*fadeK;
+      E.guide.visible=true;
+    } else E.guide.visible=false;
+  }
+  const open=1-smoothstep(1.4,3.4,doorDist);
+  doorL.position.z=4.2-1.5*open; doorR.position.z=5.8+1.5*open;
+}
+
+function updateNurse(t){
+  let tri=null, pt=null;
+  for(const p of sched.patients){
+    if(t>=p.tTriStart&&t<p.tTriEnd) tri=p;
+    if(t>=p.tTriEnd-0.3&&t<p.tTriEnd+1.4) pt=p;
+  }
+  const n=nurse;
+  n.body.position.y=-0.36;
+  n.legL.rotation.x=n.legR.rotation.x=-1.45;
+  let armL=-0.55, armRx=-0.55, armRz=0, headX=0, yaw=0;
+  if(tri){ armL=-0.95+0.12*Math.sin(t*13); headX=0.15+0.05*Math.sin(t*2.7); }
+  if(pt){ const u=clamp01((t-(pt.tTriEnd-0.3))/1.7), k=Math.sin(Math.PI*u); armRz=1.35*k; armRx=-0.55*(1-k)-0.25*k; yaw=0.45*k; headX=0; }
+  n.armL.rotation.x=armL; n.armR.rotation.x=armRx; n.armR.rotation.z=armRz;
+  n.head.rotation.x=headX; n.head.rotation.y=yaw*0.8;
+  n.g.rotation.y=yaw;
+}
+
+const dpose={};
+function doctorState(t,o){
+  o.x=HOME.x; o.z=HOME.z; o.yaw=Math.PI; o.walk=false; o.phase=0; o.exam=null;
+  for(const s of sched.docSegs){
+    if(t<s.t0) break;
+    if(s.type==='walk'){
+      const dur=s.t1-s.t0;
+      if(t<=s.t1&&dur>0){ walkOn(s.path,(t-s.t0)/dur,o); return o; }
+      const P=s.path.P, b=P[P.length-1], a=P[P.length-2];
+      o.x=b.x; o.z=b.y; o.walk=false;
+      o.yaw=s.home?Math.PI:(a?Math.atan2(b.x-a.x,b.y-a.y):o.yaw);
+    } else {
+      o.x=s.x; o.z=s.z; o.yaw=s.yaw; o.walk=false;
+      if(t<s.t1){ o.exam=s.p; return o; }
+    }
+  }
+  return o;
+}
+function updateDoctor(t,dt){
+  const o=doctorState(t,dpose), d=doctor;
+  d.yaw=dampAngle(d.yaw,o.yaw,8,dt);
+  d.g.quaternion.setFromAxisAngle(UP,d.yaw);
+  d.g.position.set(o.x,0,o.z);
+  const sw=o.walk?Math.sin(o.phase):0;
+  d.legL.rotation.x=sw*0.55; d.legR.rotation.x=-sw*0.55;
+  d.body.position.y=o.walk?Math.abs(Math.cos(o.phase))*0.03:0;
+  if(o.exam){
+    d.armR.rotation.x=-1.2+0.08*Math.sin(t*4); d.armL.rotation.x=-0.35;
+    d.head.rotation.x=0.35; d.head.rotation.y=0; d.body.rotation.x=0.1;
+  } else {
+    d.armL.rotation.x=-sw*0.45; d.armR.rotation.x=sw*0.45;
+    d.head.rotation.x=0; d.body.rotation.x=0;
+    d.head.rotation.y=o.walk?0:0.3*Math.sin(t*0.8);
+  }
+}
+
+/* ---------------- UI ---------------- */
+let playing=true, speed=1, tl=0, feedCount=-1, selected=-1, infoTimer=0;
+const reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const playBtn=$('play');
+function setPlaying(v){
+  playing=v;
+  playBtn.textContent=playing?'⏸ หยุดชั่วคราว':'▶ เล่น';
+  if(playing) $('prompt').classList.add('hidden');
+}
+const blurIfMouse=(e)=>{ if(e.detail>0) e.currentTarget.blur(); };
+playBtn.addEventListener('click',(e)=>{ setPlaying(!playing); blurIfMouse(e); });
+$('promptPlay').addEventListener('click',()=>setPlaying(true));
+$('resetView').addEventListener('click',(e)=>{ resetView(); blurIfMouse(e); });
+$('reroll').addEventListener('click',(e)=>{ seed=2+Math.floor(Math.random()*1e6); rebuild(); blurIfMouse(e); });
+$('speed').addEventListener('input',(e)=>{ speed=parseFloat(e.target.value); $('speedVal').textContent=speed.toFixed(2)+'×'; });
+$('count').addEventListener('input',(e)=>{ N=parseInt(e.target.value,10); $('countVal').textContent=N+' คน'; rebuild(); });
+$('closeInfo').addEventListener('click',()=>deselect());
+window.addEventListener('keydown',(e)=>{
+  if(e.target&&/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;   // กำลังพิมพ์ session / ตั้งค่า
+  if(e.code==='Space'||e.key===' '){
+    if(e.target&&e.target.tagName==='BUTTON') return;
+    e.preventDefault(); setPlaying(!playing);
+  } else if(e.key==='r'||e.key==='R'){ resetView(); }
+});
+
+const feedList=$('feedList');
+function fmt(s){ s=Math.max(0,Math.floor(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function updateHUD(t){
+  let n=0; const ev=sched.events; while(n<ev.length&&ev[n].t<=t) n++;
+  if(n!==feedCount){
+    const grew=n>feedCount&&feedCount>=0; feedCount=n;
+    const items=ev.slice(Math.max(0,n-5),n);
+    feedList.innerHTML=items.length?items.map((e,i)=>`<div class="ev${grew&&i===items.length-1?' new':''}"><span class="dot" style="background:${e.c}"></span><span>${e.h}</span></div>`).join(''):'<div class="ev muted">รอผู้ป่วยรายแรกมาถึง…</div>';
+  }
+  $('bar').style.width=(t/L*100).toFixed(2)+'%';
+  const sim=8*60+Math.floor(t);
+  $('simClock').textContent=`เวลาจำลอง ${String(Math.floor(sim/60)).padStart(2,'0')}:${String(sim%60).padStart(2,'0')} น.`;
+  $('loopTxt').textContent=`${fmt(t)} / ${fmt(L)}`;
+}
+function statusOf(p,t){
+  if(t<p.arr) return 'ยังไม่มาถึงห้องฉุกเฉิน';
+  if(t<p.tSeat) return 'กำลังเดินเข้าห้องฉุกเฉิน';
+  if(t<p.tCall) return 'นั่งรอซักประวัติ';
+  if(t<p.tTriStart) return 'ถูกเรียกไปจุดคัดกรอง';
+  if(t<p.tTriEnd) return 'พยาบาลกำลังซักประวัติ';
+  if(t<p.tBed) return 'กำลังเดินไปเตียงตามสี';
+  if(t<p.tLie) return 'กำลังขึ้นเตียง';
+  if(t<p.tExamStart) return `รอแพทย์ตรวจ (${Math.max(0,Math.round(t-p.tLie))} นาที)`;
+  if(t<p.tExamEnd) return 'แพทย์กำลังตรวจ';
+  return 'ตรวจแล้ว · ให้การรักษาต่อ';
+}
+function updateInfo(t){
+  if(selected<0||!sched.patients[selected]) return;
+  const p=sched.patients[selected], T=TRI[p.level], known=t>=p.tTriEnd-0.5;
+  $('iTitle').textContent=`ผู้ป่วย #${p.id}`;
+  $('iAge').textContent=`${p.age} ปี`;
+  $('iSym').textContent=p.symptom;
+  $('iLevel').innerHTML=known?`<span class="dot" style="background:${T.hex}"></span>สี${T.name} · ${T.label}`:'<span class="muted">รอคัดกรอง</span>';
+  $('iStatus').textContent=statusOf(p,t);
+  $('iBed').textContent=known?`เตียง${p.bed.name}`:'-';
+  let q='-';
+  if(t>=p.tExamEnd) q='ตรวจเรียบร้อย';
+  else if(t>=p.tExamStart) q='กำลังได้รับการตรวจ';
+  else if(t>=p.tLie){
+    const w=sched.patients.filter(o=>o.tLie<=t&&t<o.tExamStart).sort((a,b)=>a.level-b.level||a.tLie-b.tLie);
+    q=`ลำดับที่ ${w.indexOf(p)+1} จาก ${w.length} คนที่รอ`;
+  } else if(known) q='ยังไม่ถึงเตียง';
+  $('iQueue').textContent=q;
+}
+function select(i){ selected=i; $('info').classList.remove('hidden'); infoTimer=1; }
+function deselect(){ selected=-1; DB.selVn=''; $('info').classList.add('hidden'); selRing.visible=false; if(MODE==='live') renderList(); }
+
+/* ---------------- camera controls ---------------- */
+const DEF={theta:0.42,phi:0.98,radius:34};
+const view={...DEF}, cur={...DEF};
+const MINR=12, MAXR=60;
+const target=new THREE.Vector3();
+function defaultRadius(){ const a=window.innerWidth/window.innerHeight; return a<0.8?54:a<1.2?44:34; }
+function resetView(){ view.theta=DEF.theta; view.phi=DEF.phi; view.radius=defaultRadius(); }
+view.radius=cur.radius=defaultRadius();
+
+const pointers=new Map(); let pinchDist=0, downPos=null, moved=false;
+canvas.addEventListener('pointerdown',(e)=>{
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){ downPos={x:e.clientX,y:e.clientY}; moved=false; canvas.classList.add('dragging'); }
+  if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchDist=Math.hypot(a.x-b.x,a.y-b.y); moved=true; }
+});
+canvas.addEventListener('pointermove',(e)=>{
+  if(!pointers.has(e.pointerId)) return;
+  const prev=pointers.get(e.pointerId), dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){
+    view.theta-=dx*0.006; view.phi=clamp(view.phi-dy*0.005,0.22,1.45);
+    if(downPos&&Math.hypot(e.clientX-downPos.x,e.clientY-downPos.y)>6) moved=true;
+  } else if(pointers.size===2){
+    const [a,b]=[...pointers.values()], d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(pinchDist>0&&d>0) view.radius=clamp(view.radius*pinchDist/d,MINR,MAXR);
+    pinchDist=d;
+  }
+});
+function endPointer(e){
+  if(!pointers.has(e.pointerId)) return;
+  if(e.type==='pointerup'&&pointers.size===1&&!moved) pick(e.clientX,e.clientY);
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinchDist=0;
+  if(pointers.size===0) canvas.classList.remove('dragging');
+}
+canvas.addEventListener('pointerup',endPointer);
+canvas.addEventListener('pointercancel',endPointer);
+canvas.addEventListener('wheel',(e)=>{ e.preventDefault(); view.radius=clamp(view.radius*Math.exp(e.deltaY*0.0012),MINR,MAXR); },{passive:false});
+canvas.addEventListener('dblclick',(e)=>{ e.preventDefault(); resetView(); });
+
+const raycaster=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function pick(x,y){
+  const r=canvas.getBoundingClientRect();
+  ndc.set(((x-r.left)/r.width)*2-1,-((y-r.top)/r.height)*2+1);
+  raycaster.setFromCamera(ndc,camera);
+  const objs=pool.filter(E=>E.g.visible).map(E=>E.g);
+  const hit=raycaster.intersectObjects(objs,true)[0];
+  if(hit&&hit.object.userData.pid!==undefined){
+    const pid=hit.object.userData.pid;
+    if(MODE==='live'){ const E=pool[pid]; if(E&&E.L) liveSelect(E.L.vn); }
+    else select(pid);
+  }
+  else deselect();
+}
+
+function updateCamera(dt){
+  const k=1-Math.exp(-8*dt);
+  cur.theta+=(view.theta-cur.theta)*k; cur.phi+=(view.phi-cur.phi)*k; cur.radius+=(view.radius-cur.radius)*k;
+  /* โหมดข้อมูลจริงเป็นจอดูค้าง → กล้องนิ่งกลางห้อง ไม่แพนตามเรื่องราวแบบโหมดจำลอง */
+  const live=MODE==='live', ph=live?0:tl/L;
+  const tx=live?-0.5:-4+6.5*smoothstep(0.12,0.55,ph)-6.5*smoothstep(0.86,1.0,ph);
+  const tz=live?-0.6:0.8-1.6*smoothstep(0.3,0.7,ph)+1.6*smoothstep(0.86,1.0,ph);
+  target.set(tx,0.6,tz);
+  const th=cur.theta+(live?0:0.2*Math.sin(ph*Math.PI*2));
+  const r=cur.radius*(live?1:1-0.05*Math.sin(ph*Math.PI*2));
+  const sp=Math.sin(cur.phi);
+  camera.position.set(target.x+r*sp*Math.sin(th),target.y+r*Math.cos(cur.phi),target.z+r*sp*Math.cos(th));
+  camera.lookAt(target);
+  wallBack.visible=camera.position.z>-9.6;
+  wallLeft.visible=camera.position.x>-15.6;
+  wallRight.visible=camera.position.x<15.6;
+}
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+/* =====================================================================
+   โหมดข้อมูลจริง — ผู้ป่วยที่อยู่ในห้องฉุกเฉินตอนนี้ จาก HOSxP (er_regist) ผ่าน BMS Session · อ่านอย่างเดียว
+   ---------------------------------------------------------------------
+   ตรวจกับฐานจริง ppbh_hosxp (PostgreSQL) 26/11/2569:
+   - er_regist หนึ่งแถวต่อหนึ่ง visit ที่เข้า ER: enter_er_time → triage_datetime → doctor_tx_time → leave_datetime
+   - leave_datetime = ออกจาก ER แล้วจริง (วันที่ปิดแล้วมีครบทุกแถว) · finish_time ไม่ใช่เวลาออก (แพทย์บันทึกเสร็จ
+     ขณะที่คนไข้ยังอยู่) · บางแถว leave_datetime เป็นเที่ยงคืนทั้งที่มาทีหลัง = ออกแล้วแต่เวลาผิด → นับว่าออก ไม่ใช้เวลานั้น
+   - er_emergency_level_id → er_emergency_level (Resuscitate / Emergency / Urgency / Semi Urgency / Non Urgency) = 5 สี
+   - er_leave_status_id → er_leave_status (รอพบแพทย์ / กำลังตรวจรักษา / นอนสังเกตอาการ / Admit / กลับบ้าน / Refer …)
+   - er_dch_type → er_dch_type (กลับบ้าน / Admitted / รับไว้สังเกตอาการ / ส่งต่อ / ปฏิเสธการ Admit …)
+   - Admit แล้วยังนอนอยู่ใน ER จนกว่าจะมี leave_datetime (รอเตียงวอร์ด)
+   - อาการสำคัญ/สัญญาณชีพ = opdscreen · เพศ/วันเกิด = patient · มาอย่างไร = ovst.ovstist (EMS = รถฉุกเฉิน)
+   - ER เปิด 24 ชม. → ดึงของเมื่อวานที่ยังไม่ออกด้วย (คนที่มาก่อนเที่ยงคืนแล้วยังอยู่)
+   ===================================================================== */
+const APP_NAME='BMS-ErTriage3D';
+const PASTEJSON_URL='https://hosxp.net/phapi/PasteJSON';
+const SID_PARAM='bms-session-id', LS_SID='er3d.sid', LS_HOME_SID='bms3d.sid', LS_OPT='er3d.opt.';
+const TIMEOUT_MS=60000, URL_MAX=2000, PAGE_SIZE=2500, MAX_AV=40, DETAIL_CHUNK=30;
+/* เป้าเวลารอพบแพทย์หลังคัดกรอง (นาที) ตามระดับ แดง/ชมพู/เหลือง/เขียว/ขาว · รอคัดกรองเกิน 10 นาทีก็เตือน */
+const TARGET_MIN=[0,10,30,60,120], TRIAGE_TARGET=10;
+const str=v=>(v==null?'':String(v).trim());
+const sq=v=>"'"+String(v??'').replace(/['\\]/g,'')+"'";
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const val=(row,key)=>row[key]??row[key.toUpperCase()];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const p2=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+const hhmm=ms=>{ const d=new Date(ms); return p2(d.getHours())+':'+p2(d.getMinutes()); };
+const hmTag=min=>{ min=Math.max(0,Math.floor(min)); return Math.floor(min/60)+':'+p2(min%60); };
+function durTxt(min){
+  if(min==null||!isFinite(min)) return '–';
+  min=Math.max(0,Math.round(min)); if(min<60) return min+' นาที';
+  const h=Math.floor(min/60), r=min%60; return r?`${h} ชม. ${r} นาที`:`${h} ชม.`;
+}
+/* เวลาจาก tunnel มาเป็น "2026-11-26T06:14:49" (PostgreSQL) หรือ "2026-11-26 06:14:49" (MySQL) */
+function parseDT(v){
+  const m=str(v).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/); if(!m) return null;
+  const t=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)).getTime();
+  return Number.isFinite(t)?t:null;
+}
+function ageOf(bday,now){
+  const m=str(bday).match(/(\d{4})-(\d{2})-(\d{2})/); if(!m) return null;
+  let y=+m[1]; if(y>2400) y-=543;
+  const n=new Date(now); let a=n.getFullYear()-y;
+  if(n.getMonth()+1<+m[2]||(n.getMonth()+1===+m[2]&&n.getDate()<+m[3])) a--;
+  return a>=0&&a<130?a:null;
+}
+const median=a=>{ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), h=s.length>>1; return s.length%2?s[h]:(s[h-1]+s[h])/2; };
+function lsGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+function readJson(k){ try{ const o=JSON.parse(lsGet(k)||'null'); return o&&typeof o==='object'?o:null; }catch(e){ return null; } }
+
+let MODE='sim', liveT=0;
+const DB={conn:null, user:{}, pg:false, cols:{}, probed:false, db:'', engine:'', hosp:'', mkt:'', lvCol:'NULL', lvSrc:'',
+  lvName:new Map(), lsName:new Map(), dchName:new Map(), ptName:new Map(), istName:new Map(),
+  pts:[], byVn:new Map(), today:[], rowsAll:[], det:new Map(), active:[], busy:false, nextAt:0, err:'', at:0,
+  first:true, opt:{every:20, staleH:12, hide:false}, selVn:'', staleN:0, over:0, emsAt:0, feedSig:'', tick:0};
+function defOpt(){ return {every:20, staleH:12, hide:false}; }
+const optKey=()=>LS_OPT+(DB.db||'-');
+function loadOpt(){
+  const o=defOpt(), s=readJson(optKey());
+  if(s){
+    if([10,20,30,60].includes(s.every)) o.every=s.every;
+    if(typeof s.staleH==='number'&&s.staleH>=0&&s.staleH<=72) o.staleH=s.staleH;
+    o.hide=s.hide===true;
+  }
+  DB.opt=o;
+}
+function saveOpt(){ lsSet(optKey(),JSON.stringify(DB.opt)); }
+
+/* ---- เชื่อมต่อ HOSxP (แบบเดียวกับแอป 3 มิติตัวอื่นในชุด) ----
+   เปิดผ่าน start.bat → ยิงผ่าน /proxy ของเครื่องตัวเอง เพราะ tunnel ไม่ตอบ CORS */
+function proxied(u){
+  const direct=location.protocol==='file:'||/(^|\.)hosxp\.net$/i.test(location.hostname);
+  return direct?u:`${location.origin}/proxy?url=${encodeURIComponent(u)}`;
+}
+async function fetchJson(url,headers){
+  const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),TIMEOUT_MS);
+  try{
+    const res=await fetch(url,{headers:{Accept:'application/json',...(headers||{})},signal:ctrl.signal});
+    const text=await res.text(); let json=null; try{ json=JSON.parse(text); }catch(e){}
+    if(!json||typeof json!=='object') return {MessageCode:res.ok?0:res.status,http:res.status,empty:!text.trim(),nonJson:true,Message:`HTTP ${res.status} (${text.trim()?'ตอบกลับไม่ใช่ JSON':'ตอบกลับว่าง'})`};
+    if(json.MessageCode==null) json.MessageCode=res.status; json.http=res.status; return json;
+  }catch(e){ return {MessageCode:0,Message:e.name==='AbortError'?'หมดเวลารอ (timeout)':'Network: '+e.message,network:true}; }
+  finally{ clearTimeout(tid); }
+}
+function extractConn(data){
+  const r=data.result||{}, ui=r.user_info||{};
+  const kv=(r.key_value&&typeof r.key_value==='object')?r.key_value:{};
+  const apiUrl=kv['hosxp.api_url']||ui['hosxp.api_url']||ui.bms_url||'';
+  const authKey=kv['hosxp.api_auth_key']||ui['hosxp.api_auth_key']||ui.bms_session_code||(typeof r.key_value==='string'?r.key_value:'');
+  const clean=String(apiUrl).replace(/\/+$/,'').replace(/\/api(\/sql)?$/i,'').replace(/\/+$/,'');
+  return {apiUrl:clean,authKey:String(authKey||''),user:ui};
+}
+const isAuthErr=r=>!!r&&!r.network&&(r.MessageCode===401||/authoriz/i.test(String(r.Message||'')));
+const ok=r=>!!r&&r.MessageCode===200&&Array.isArray(r.data);
+function explain(r){
+  if(!r) return 'ไม่ทราบสาเหตุ';
+  if(r.network) return location.protocol==='file:'
+    ?'ส่งคำสั่งไม่ได้ เพราะเปิดไฟล์ตรงจากดิสก์ — ใช้ start.bat แล้วเปิดผ่าน http://localhost'
+    :'ส่งคำสั่งไป HOSxP ไม่ได้ ('+r.Message+') — ให้เปิดผ่าน start.bat';
+  if(isAuthErr(r)) return `Session หมดอายุหรือไม่ถูกต้อง (${r.MessageCode}) — ขอ session ID ใหม่จาก HOSxP`;
+  return `${r.MessageCode}: ${r.Message||'ผิดพลาด'}`;
+}
+const BUSY_CODES=[409,501,503,504];
+const SQL_ERR_RE=/does not exist|doesn'?t exist|unknown (column|table|field)|no such (column|table)|syntax error|undefined (column|table|function)|ambiguous|validation/i;
+let sqlChain=Promise.resolve();
+function sql(text){ const job=()=>runSql(text); const p=sqlChain.then(job,job); sqlChain=p.catch(()=>{}); return p; }
+async function runSql(text){
+  if(!DB.conn) return {MessageCode:0,Message:'ยังไม่ได้เชื่อมต่อ'};
+  const s=text.replace(/\s+/g,' ').trim();
+  let target=`${DB.conn.apiUrl}/api/sql?sql=${encodeURIComponent(s)}&app=${encodeURIComponent(APP_NAME)}`;
+  if(DB.mkt) target+=`&marketplace-token=${encodeURIComponent(DB.mkt)}`;
+  if(target.length>URL_MAX) return {MessageCode:414,Message:`คำสั่งยาว ${target.length} ตัวอักษร เกินที่ tunnel รับได้`};
+  let r;
+  for(let a=0;;a++){
+    r=await fetchJson(proxied(target),{Authorization:`Bearer ${DB.conn.authKey}`});
+    const busy=!isAuthErr(r)&&!SQL_ERR_RE.test(String(r.Message||''))&&(r.empty||BUSY_CODES.includes(r.MessageCode)||BUSY_CODES.includes(r.http)||(r.network&&a<2));
+    if(!busy||a>=3) break;
+    await sleep(Math.min(1500,300*2**a)+Math.random()*150);
+  }
+  if(!ok(r)) console.warn(`[sql] ERR ${r.MessageCode} ${r.Message||''}\n${s}`);
+  if(isAuthErr(r)) sessionLost();
+  return r;
+}
+async function rows(text){ const r=await sql(text); return ok(r)?r.data:null; }
+async function mustRows(text,what){ const r=await sql(text); if(!ok(r)) throw new Error(`${what}: ${explain(r)}`); return r.data; }
+
+const PROBE=['er_regist','er_emergency_level','er_emergency_type','er_leave_status','er_dch_type','er_pt_type','ovst','ovstist','opdscreen','patient'];
+async function probeSchema(){
+  const r=await rows(`SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = ${DB.pg?'current_schema()':'DATABASE()'} AND table_name IN (${PROBE.map(sq).join(',')})`);
+  const cols={};
+  (r||[]).forEach(x=>{ const t=str(val(x,'t')).toLowerCase(), c=str(val(x,'c')).toLowerCase(); if(t&&c) (cols[t]=cols[t]||new Set()).add(c); });
+  DB.cols=cols; DB.probed=!!(r&&r.length);
+}
+const has=(t,c)=>!DB.probed?true:!!(DB.cols[t]&&DB.cols[t].has(c));
+const hasTable=t=>!DB.probed?true:!!DB.cols[t];
+async function loadMap(t,c,n,m){
+  m.clear();
+  if(!hasTable(t)||!has(t,c)||!has(t,n)) return;
+  (await rows(`SELECT ${c} AS c, ${n} AS n FROM ${t}`)||[]).forEach(r=>m.set(str(val(r,'c')),str(val(r,'n'))));
+}
+
+/* ---- ระดับคัดกรอง → สีในฉาก (0 แดง … 4 ขาว) · ดูจากชื่อก่อน เพราะรหัสอาจต่างกันในแต่ละโรงพยาบาล ---- */
+function lvIndex(id){
+  const c=str(id); if(!c) return -1;
+  const n=DB.lvName.get(c)||'';
+  if(n){
+    if(/resus|กู้ชีพ|วิกฤต|แดง/i.test(n)) return 0;
+    if(/semi|กึ่ง|less|เขียว/i.test(n)) return 3;
+    if(/non|รอได้|ทั่วไป|ไม่เร่ง|ไม่ฉุกเฉิน|ขาว/i.test(n)) return 4;
+    if(/emergen|ฉุกเฉิน|ชมพู/i.test(n)) return 1;
+    if(/urgen|ด่วน|เหลือง/i.test(n)) return 2;
+  }
+  const k=parseInt(c,10); return k>=1&&k<=5?k-1:-1;
+}
+/* ---- ขั้นตอนใน ER ----
+   wtri รอคัดกรอง · wdoc คัดกรองแล้ว รอพบแพทย์ · tx แพทย์ตรวจแล้ว/กำลังรักษา · obs นอนสังเกตอาการ
+   admit รับไว้นอนโรงพยาบาล รอขึ้นวอร์ด · out ออกจาก ER แล้ว (ไม่แสดงในฉาก) */
+const RE_INER=/รอพบ|รอตรวจ|กำลังตรวจ|สังเกต|admit/i;
+const leavingName=n=>!!n&&!(RE_INER.test(n)&&!/ปฏิเสธ/.test(n));
+const admitName=n=>/admit/i.test(n)&&!/ปฏิเสธ/.test(n);
+function stageOf(p){
+  if(p.left) return 'out';
+  const ln=DB.lsName.get(p.ls)||'', dn=DB.dchName.get(p.dch)||'';
+  if((p.ls&&leavingName(ln))||(p.dch&&leavingName(dn))) return 'out';
+  if(p.an||admitName(ln)||admitName(dn)) return 'admit';
+  if(/สังเกต/.test(ln)||/สังเกต/.test(dn)||p.obs.toUpperCase()==='Y') return 'obs';
+  if(p.doc) return 'tx';
+  if(p.tri||p.lv>=0) return 'wdoc';
+  return 'wtri';
+}
+function stageText(p){
+  if(p.stage==='wtri') return 'รอคัดกรอง';
+  if(p.stage==='wdoc') return 'คัดกรองแล้ว · รอพบแพทย์';
+  if(p.stage==='obs') return 'นอนสังเกตอาการ';
+  if(p.stage==='admit') return 'รับไว้นอนโรงพยาบาล · รอขึ้นวอร์ด';
+  return p.active?'แพทย์กำลังตรวจรักษา':'แพทย์ตรวจแล้ว · ให้การรักษา';
+}
+const leaveName=p=>DB.lsName.get(p.ls)||DB.dchName.get(p.dch)||'';
+const isEms=p=>{ const n=DB.istName.get(p.ist)||''; return n?/EMS|1669|รถฉุกเฉิน|กู้ชีพ/i.test(n):p.ist==='10'; };
+/* นาทีที่รอเกินเป้า (null = ไม่อยู่ในขั้นที่มีเป้า) */
+function overMin(p,now){
+  if(p.stage==='wtri'&&p.ent) return (now-p.ent)/60000-TRIAGE_TARGET;
+  if(p.stage==='wdoc'&&p.lv>=0){ const s=p.tri||p.ent; return s?(now-s)/60000-TARGET_MIN[p.lv]:null; }
+  return null;
+}
+
+/* ---- SQL ---- */
+function erSql(d0,d1,cur){
+  const e=(k,a)=>has('er_regist',k)?`e.${k} AS ${a}`:`NULL AS ${a}`;
+  const v=(k,a)=>has('ovst',k)?`v.${k} AS ${a}`:`NULL AS ${a}`;
+  const dc=has('er_regist','vstdate')?'e.vstdate':'v.vstdate';
+  const open=has('er_regist','leave_datetime')?` AND (${dc} = ${sq(d1)} OR e.leave_datetime IS NULL)`:` AND ${dc} = ${sq(d1)}`;
+  return `SELECT e.vn AS vn, v.hn AS hn, ${e('enter_er_time','ent')}, ${e('triage_datetime','tri')}, ${e('doctor_tx_time','doc')},
+    ${e('leave_datetime','lft')}, ${DB.lvCol} AS lid, ${e('er_leave_status_id','ls')}, ${e('er_dch_type','dch')}, ${e('er_pt_type','pt')},
+    ${e('observe','obs')}, ${e('news2_score','nw')}, ${v('an','an')}, ${v('ovstist','ist')}, v.vstdate AS vd, v.vsttime AS vt
+    FROM er_regist e JOIN ovst v ON v.vn = e.vn
+    WHERE ${dc} BETWEEN ${sq(d0)} AND ${sq(d1)}${open}${cur!=null?` AND e.vn > ${sq(cur)}`:''} ORDER BY e.vn LIMIT ${PAGE_SIZE}`;
+}
+/* อาการสำคัญ + สัญญาณชีพ + เพศ/อายุ เฉพาะคนที่ยังอยู่ใน ER (ไม่กี่สิบคน) แยกคำสั่งไว้ จะได้ไม่ทำให้คำสั่งหลักยาว */
+async function loadDetail(vns){
+  const m=new Map(); if(!vns.length||!hasTable('opdscreen')) return m;
+  const o=(k,a)=>has('opdscreen',k)?`o.${k} AS ${a}`:`NULL AS ${a}`;
+  const pj=hasTable('patient')&&has('opdscreen','hn')&&has('patient','hn');
+  const pc=(k,a)=>pj&&has('patient',k)?`p.${k} AS ${a}`:`NULL AS ${a}`;
+  for(let i=0;i<vns.length;i+=DETAIL_CHUNK){
+    const chunk=vns.slice(i,i+DETAIL_CHUNK);
+    const r=await rows(`SELECT o.vn AS vn, ${o('cc','cc')}, ${o('bps','bs')}, ${o('bpd','bd')}, ${o('pulse','pr')}, ${o('rr','rr')},
+      ${o('temperature','tp')}, ${o('o2sat','o2')}, ${pc('sex','sx')}, ${pc('birthday','bday')}
+      FROM opdscreen o${pj?' LEFT JOIN patient p ON p.hn = o.hn':''} WHERE o.vn IN (${chunk.map(sq).join(',')})`);
+    (r||[]).forEach(x=>m.set(str(val(x,'vn')),{cc:str(val(x,'cc')),bs:str(val(x,'bs')),bd:str(val(x,'bd')),pr:str(val(x,'pr')),
+      rr:str(val(x,'rr')),tp:str(val(x,'tp')),o2:str(val(x,'o2')),sx:str(val(x,'sx')),bday:str(val(x,'bday'))}));
+  }
+  return m;
+}
+function parseRow(r){
+  const vd=str(val(r,'vd')).slice(0,10);
+  const ent=parseDT(val(r,'ent'))||parseDT(vd+' '+str(val(r,'vt')));
+  const lft=str(val(r,'lft')), la=parseDT(lft);
+  const p={vn:str(val(r,'vn')), hn:str(val(r,'hn')), day:vd, ent, tri:parseDT(val(r,'tri')), doc:parseDT(val(r,'doc')),
+    left:!!lft, leftAt:la&&(!ent||la>=ent)?la:null, lid:str(val(r,'lid')), ls:str(val(r,'ls')), dch:str(val(r,'dch')),
+    pt:str(val(r,'pt')), obs:str(val(r,'obs')), nw:str(val(r,'nw')), an:str(val(r,'an')), ist:str(val(r,'ist')), det:null, slot:null, active:false};
+  p.lv=lvIndex(p.lid);
+  p.stage=stageOf(p);
+  return p;
+}
+const rankOf=p=>p.stage==='wtri'?-1:(p.lv>=0?p.lv:4.5);
+const listOrder=(a,b)=>rankOf(a)-rankOf(b)||(a.ent||0)-(b.ent||0);
+
+/* ---- ตำแหน่งในฉาก ----
+   ช่องรอ (wait): จุดคัดกรอง 1 + ที่นั่งรอ 8 + ยืนรอ 6 · แต่ละสี: เตียง 2 + เก้าอี้หน้าโซน 3 (มีเฉพาะโหมดข้อมูลจริง) */
+const HUB=[-4,1], WEST=[-6.6,4.7], DOOR_IN=[-15.4,5], DOOR_OUT=[-21.5,5];
+const TRI_SLOT={kind:'tri',zone:'wait',reg:'front',x:TRI_SPOT.x,z:TRI_SPOT.z,yaw:Math.PI,sit:1,pre:[-9,5.3],name:'จุดคัดกรอง'};
+const SEAT_SLOTS=SEATS.map((x,i)=>({kind:'seat',zone:'wait',reg:'front',x,z:7.1,yaw:Math.PI,sit:1,pre:[x,6.1],name:'ที่นั่งรอ '+(i+1)}));
+const STAND_SLOTS=[0,1,2,3,4,5].map(i=>{ const x=-5.6+i*0.75; return {kind:'stand',zone:'wait',reg:'front',x,z:7.0,yaw:Math.PI,pre:[x,6.1],name:'ยืนรอข้างที่นั่งรอ'}; });
+const BED_SLOTS=beds.map(b=>({kind:'bed',zone:'z'+b.level,reg:b.h.z<0?'back':'right',bed:b,x:b.patPt.x,z:b.patPt.z,
+  ax:b.patPt.x,az:b.patPt.z,deep:true,yaw:Math.atan2(-b.s.x,-b.s.z),lie:1,name:'เตียง'+b.name}));
+const zoneChairs=new THREE.Group(); zoneChairs.visible=false; scene.add(zoneChairs);
+const CHAIR_SLOTS=[];
+[[-10,-8.25,-6.5],[-3,-1.25,0.5],[4,5.75,7.5]].forEach((xs,lv)=>xs.forEach((x,k)=>{
+  zoneChairs.add(makeChair(x,-5.4,0));
+  CHAIR_SLOTS.push({kind:'chair',zone:'z'+lv,reg:'back',x,z:-5.48,ax:x,az:-5.48,yaw:Math.PI,sit:1,name:`เก้าอี้หน้าโซนสี${TRI[lv].name} ${k+1}`,
+    doc:{reg:'back',x,z:-6.15,ax:x+0.6,az:-6.15,deep:true,yaw:0}});
+}));
+[[-4,-2.25,-0.5],[3,4.75,6.5]].forEach((zs,j)=>zs.forEach((z,k)=>{
+  const lv=3+j;
+  zoneChairs.add(makeChair(11.0,z,-Math.PI/2));
+  CHAIR_SLOTS.push({kind:'chair',zone:'z'+lv,reg:'right',x:11.08,z,ax:11.08,az:z,yaw:Math.PI/2,sit:1,name:`เก้าอี้หน้าโซนสี${TRI[lv].name} ${k+1}`,
+    doc:{reg:'right',x:11.75,z,ax:11.75,az:z+0.6,deep:true,yaw:-Math.PI/2}});
+}));
+const ZONES={wait:{prime:[TRI_SLOT],extra:[...SEAT_SLOTS,...STAND_SLOTS]}};
+for(let lv=0;lv<5;lv++) ZONES['z'+lv]={prime:BED_SLOTS.filter(s=>s.zone==='z'+lv),extra:CHAIR_SLOTS.filter(s=>s.zone==='z'+lv)};
+const DOOR_SLOT={kind:'door',zone:'door',reg:'door',x:DOOR_OUT[0],z:DOOR_OUT[1],yaw:-Math.PI/2};
+const DOC_HOME={reg:'front',x:HOME.x,z:HOME.z,yaw:Math.PI};
+
+/* ทางเดิน: ออกจากโซนเดิมทางช่องเดินของตัวเอง → ผ่านกลางห้อง → เข้าโซนใหม่ทางช่องเดิน (ไม่เดินทะลุเตียง/เก้าอี้) */
+function regionAt(x,z){ return z<-4.4?'back':x>9.0?'right':'front'; }
+function routePts(x,z,slot){
+  const P=[[x,z]];
+  if(x<-15.6){ P.push(DOOR_IN); x=DOOR_IN[0]; z=DOOR_IN[1]; }
+  const reg=regionAt(x,z);
+  if(reg==='back'){ P.push([x,-3.2]); z=-3.2; }
+  else if(reg==='right'){ P.push([9.4,z]); x=9.4; }
+  else if(z>6.3){ P.push([x,6.1]); z=6.1; }
+  const to=slot.reg;
+  const fromWest=reg==='front'&&x<-6.6;
+  const toWest=to==='door'||(to==='front'&&slot.x<-6.6);
+  if(fromWest&&!toWest) P.push(WEST,HUB);
+  else if(!fromWest&&toWest){ if(reg!=='front') P.push(HUB); P.push(WEST); }
+  if(to==='door'){ P.push(DOOR_IN,DOOR_OUT); return P; }
+  if(to==='back'){ P.push([slot.ax,-3.2]); if(slot.deep) P.push([slot.ax,-6.2]); }
+  else if(to==='right'){ P.push([9.4,slot.az]); if(slot.deep) P.push([12.4,slot.az]); }
+  else if(slot.pre) P.push(slot.pre);
+  P.push([slot.x,slot.z]);
+  return P;
+}
+
+/* ---- คนไข้ในฉาก (ใช้หุ่นชุดเดียวกับโหมดจำลอง) ---- */
+function allocAvatar(vn){
+  let E=pool.find(e=>!e.L);
+  if(!E){ if(pool.length>=MAX_AV) return null; E=makeEntry(pool.length); pool.push(E); }
+  E.L={vn,x:0,z:0,yawT:0,path:null,s:0,slot:null,target:null,via:null,then:null,hold:0,wait:0,sit:0,lie:0,fade:1,
+    walk:false,phase:0,leaving:false,fadeOut:false,snap:true,lastP:null};
+  hideEntry(E); E.wasHidden=true;
+  return E;
+}
+function freeAvatar(E){ E.L=null; hideEntry(E); E.wasHidden=true; }
+const avatarOf=vn=>pool.find(e=>e.L&&e.L.vn===vn&&!e.L.leaving&&!e.L.fadeOut);
+const triFree=E=>!pool.some(e=>e!==E&&e.L&&(e.L.slot===TRI_SLOT||e.L.target===TRI_SLOT||e.L.via===TRI_SLOT));
+function goSlot(E,slot,opt={}){
+  const S=E.L;
+  S.target=slot; S.hold=0; S.then=null;
+  if(opt.instant){
+    S.path=null; S.via=null; S.slot=slot; S.x=slot.x; S.z=slot.z; S.yawT=slot.yaw; E.yaw=slot.yaw;
+    S.sit=slot.sit?1:0; S.lie=slot.lie?1:0; S.fade=1; return;
+  }
+  S.via=opt.viaTri&&slot!==TRI_SLOT?TRI_SLOT:null;
+  S.path=makePath(routePts(S.x,S.z,S.via||slot)); S.s=0;
+}
+function arrive(E,S){
+  if(S.leaving){ freeAvatar(E); return; }
+  S.slot=S.via||S.target; S.x=S.slot.x; S.z=S.slot.z;
+  if(S.via){ S.via=null; S.hold=2.6; S.then=S.target; }   // นั่งที่จุดคัดกรองครู่หนึ่ง แล้วค่อยไปเตียงตามสี
+}
+const LO={};
+function stepAvatar(E,S,dt){
+  S.walk=false;
+  if(S.fadeOut){ S.fade=Math.max(0,S.fade-dt/0.6); if(S.fade<=0) freeAvatar(E); return; }
+  if(S.wait>0){ S.wait-=dt; return; }   // มาพร้อมกันหลายคนในรอบเดียว → ทยอยเดินเข้าประตูทีละคน
+  if(S.fade<1&&!S.leaving) S.fade=Math.min(1,S.fade+dt/0.5);
+  if(S.path){
+    if(S.lie>0){ S.lie=Math.max(0,S.lie-dt/LIE_T); return; }         // ลุกจากเตียงก่อน
+    if(S.sit>0){ S.sit=Math.max(0,S.sit-dt/0.35); return; }          // ลุกจากเก้าอี้ก่อน
+    S.slot=null;
+    S.s=Math.min(S.path.len,S.s+SPEED_P*dt);
+    samplePath(S.path,S.s,LO); S.x=LO.x; S.z=LO.z;
+    if(LO.dx||LO.dz) S.yawT=Math.atan2(LO.dx,LO.dz);
+    S.walk=S.path.len>0.01; S.phase=S.s*4.4;
+    if(S.leaving){ const rem=S.path.len-S.s; S.fade=clamp01(rem/2.2); }
+    if(S.s>=S.path.len-1e-6){ S.path=null; S.walk=false; arrive(E,S); }
+    return;
+  }
+  const sl=S.slot; if(!sl) return;
+  S.sit+=clamp((sl.sit?1:0)-S.sit,-dt/0.35,dt/0.35);
+  S.lie+=clamp((sl.lie?1:0)-S.lie,-dt/LIE_T,dt/LIE_T);
+  S.yawT=sl.yaw;
+  if(S.hold>0){ S.hold-=dt; if(S.hold<=0&&S.then){ const nx=S.then; S.then=null; goSlot(E,nx); } }
+}
+function poseAvatar(E,S,dt){
+  if(!E.L) return;
+  const p=DB.byVn.get(S.vn)||S.lastP;
+  E.g.visible=true;
+  const lie=easeInOutCubic(clamp01(S.lie)), bed=S.slot&&S.slot.bed;
+  if(lie>0.0005&&bed){
+    qA.setFromAxisAngle(UP,S.slot.yaw); E.g.quaternion.slerpQuaternions(qA,bed.qLie,lie); E.yaw=S.slot.yaw;
+    E.g.position.set(lerp(bed.patPt.x,bed.lieX,lie), lerp(0,bed.lieY,lie)+Math.sin(Math.PI*lie)*0.35, lerp(bed.patPt.z,bed.lieZ,lie));
+  } else {
+    if(S.snap){ E.yaw=S.yawT; S.snap=false; }
+    E.yaw=dampAngle(E.yaw,S.yawT,9,dt);
+    E.g.quaternion.setFromAxisAngle(UP,E.yaw);
+    E.g.position.set(S.x,0,S.z);
+  }
+  const sit=easeInOutSine(clamp01(S.sit)), sw=S.walk?Math.sin(S.phase):0;
+  E.body.position.y=-0.36*sit+(S.walk?Math.abs(Math.cos(S.phase))*0.03:0);
+  E.legL.rotation.x= sw*0.55*(1-sit)-1.45*sit;
+  E.legR.rotation.x=-sw*0.55*(1-sit)-1.45*sit;
+  E.armL.rotation.x=-sw*0.45-0.45*sit;
+  E.armR.rotation.x= sw*0.45-0.45*sit;
+  E.head.rotation.x=0;
+  const k=Math.max(0.001,S.fade);
+  E.g.scale.setScalar(k);
+  const lv=p?p.lv:-1, col=lv>=0?TRI[lv].color:NEUTRAL;
+  E.gown.color.lerp(col,1-Math.exp(-4*dt));
+  E.g.updateMatrixWorld(true);
+  E.head.getWorldPosition(tmpV);
+  if(lv>=0){
+    E.marker.visible=true;
+    E.marker.material.color.copy(col); E.marker.material.emissive.copy(col);
+    E.marker.position.set(tmpV.x,tmpV.y+0.42*k,tmpV.z);
+    E.marker.scale.setScalar(k); E.marker.rotation.y=liveT*2.2;
+    E.marker.material.emissiveIntensity=DOC.exam===S.vn&&!DOC.path?0.6+0.7*Math.abs(Math.sin(liveT*7)):0.35;
+  } else E.marker.visible=false;
+  if(p) liveLabel(E,p);
+  if(E.liveMat){
+    E.sprite.material=E.liveMat; E.sprite.visible=true;
+    E.sprite.position.set(tmpV.x,tmpV.y+(lv>=0?0.82:0.5)*k,tmpV.z);
+    E.sprite.scale.set(0.8*k,0.3*k,1);
+  }
+  E.pulse.visible=false; E.guide.visible=false;
+}
+/* ป้ายเหนือหัว = เวลาที่อยู่ใน ER (ชม.:นาที) สีตามระดับ · รับไว้นอนแล้วขึ้น IPD นำหน้า · รอเกินเป้าขอบแดง */
+function liveLabel(E,p){
+  const now=Date.now(), mins=p.ent?(now-p.ent)/60000:0, over=overMin(p,now);
+  const text=(p.stage==='admit'?'IPD ':'')+hmTag(mins);
+  const bg=p.lv>=0?(p.lv===4?'#f7f9fb':TRI[p.lv].hex):'#dfe6eb', fg=p.lv===2||p.lv===4||p.lv<0?'#10222e':'#ffffff';
+  const warn=over!=null&&over>0;
+  const key=text+bg+warn;
+  if(E.liveKey===key) return; E.liveKey=key;
+  if(!E.liveTex){
+    const c=document.createElement('canvas'); c.width=256; c.height=96;
+    E.liveTex=new THREE.CanvasTexture(c); E.liveTex.colorSpace=THREE.SRGBColorSpace;
+    E.liveMat=new THREE.SpriteMaterial({map:E.liveTex,depthTest:false,transparent:true});
+  }
+  const c=E.liveTex.image, g=c.getContext('2d');
+  g.clearRect(0,0,c.width,c.height);
+  g.font=`bold 44px ${FONT}`;
+  const w=Math.min(244,g.measureText(text).width+40);
+  g.fillStyle=bg; rr(g,(256-w)/2,6,w,84,34); g.fill();
+  g.lineWidth=warn?9:4; g.strokeStyle=warn?'#c62828':'rgba(16,34,46,0.35)'; g.stroke();
+  g.fillStyle=fg; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,128,51,w-24);
+  E.liveTex.needsUpdate=true;
+}
+
+/* ---- แพทย์: เดินไปข้างเตียงคนที่ "กำลังตรวจรักษา" ทีละคน (หนักก่อน) · ไม่มีใครให้ตรวจ = กลับเคาน์เตอร์ ---- */
+const DOC={path:null,s:0,x:HOME.x,z:HOME.z,yawT:Math.PI,walk:false,phase:0,exam:'',goVn:'',t:0,idx:0,spot:null};
+function docSpotFor(E){
+  const S=E&&E.L; if(!S||S.path||!S.slot) return null;
+  const sl=S.slot;
+  if(sl.bed){ const b=sl.bed; return {reg:sl.reg,x:b.docPt.x,z:b.docPt.z,ax:b.docPt.x,az:b.docPt.z,deep:true,yaw:Math.atan2(b.s.x,b.s.z)}; }
+  return sl.kind==='chair'?sl.doc:null;
+}
+function nextDocTarget(){
+  const list=DB.active;
+  let vn='', spot=null;
+  for(let k=0;k<list.length;k++){
+    const i=(DOC.idx+k)%list.length, sp=docSpotFor(avatarOf(list[i]));
+    if(sp){ vn=list[i]; spot=sp; DOC.idx=i+1; break; }
+  }
+  if(!spot){
+    if(DOC.spot===DOC_HOME) return;
+    spot=DOC_HOME; vn='';
+  } else if(vn===DOC.goVn&&DOC.spot&&DOC.spot!==DOC_HOME&&Math.hypot(spot.x-DOC.x,spot.z-DOC.z)<0.05){
+    DOC.exam=vn; DOC.t=14; return;   // คนเดิมคนเดียว ยังอยู่ที่เดิม: ตรวจต่อ ไม่ต้องเดิน
+  }
+  DOC.spot=spot; DOC.goVn=vn; DOC.exam='';
+  DOC.path=makePath(routePts(DOC.x,DOC.z,spot)); DOC.s=0;
+}
+function doctorLive(dt){
+  const d=doctor;
+  if(DOC.path){
+    DOC.s=Math.min(DOC.path.len,DOC.s+SPEED_D*dt);
+    samplePath(DOC.path,DOC.s,LO); DOC.x=LO.x; DOC.z=LO.z;
+    if(LO.dx||LO.dz) DOC.yawT=Math.atan2(LO.dx,LO.dz);
+    DOC.walk=DOC.path.len>0.01; DOC.phase=DOC.s*4.4;
+    if(DOC.s>=DOC.path.len-1e-6){ DOC.path=null; DOC.walk=false; DOC.yawT=DOC.spot.yaw; DOC.exam=DOC.goVn; DOC.t=DOC.exam?14:0; }
+  } else {
+    DOC.walk=false;
+    if(DOC.exam){
+      DOC.t-=dt;
+      const E=avatarOf(DOC.exam);
+      if(DOC.t<=0||!DB.active.includes(DOC.exam)||!E||E.L.path) { DOC.exam=''; nextDocTarget(); }
+    } else nextDocTarget();
+  }
+  d.yaw=dampAngle(d.yaw,DOC.yawT,8,dt);
+  d.g.quaternion.setFromAxisAngle(UP,d.yaw);
+  d.g.position.set(DOC.x,0,DOC.z);
+  const sw=DOC.walk?Math.sin(DOC.phase):0;
+  d.legL.rotation.x=sw*0.55; d.legR.rotation.x=-sw*0.55;
+  d.body.position.y=DOC.walk?Math.abs(Math.cos(DOC.phase))*0.03:0;
+  if(DOC.exam&&!DOC.path){
+    d.armR.rotation.x=-1.2+0.08*Math.sin(liveT*4); d.armL.rotation.x=-0.35;
+    d.head.rotation.x=0.35; d.head.rotation.y=0; d.body.rotation.x=0.1;
+  } else {
+    d.armL.rotation.x=-sw*0.45; d.armR.rotation.x=sw*0.45;
+    d.head.rotation.x=0; d.body.rotation.x=0;
+    d.head.rotation.y=DOC.walk?0:0.3*Math.sin(liveT*0.8);
+  }
+}
+function nurseLive(){
+  const n=nurse, busy=pool.some(E=>E.L&&E.L.slot===TRI_SLOT&&!E.L.path);
+  n.body.position.y=-0.36; n.legL.rotation.x=n.legR.rotation.x=-1.45;
+  n.armL.rotation.x=busy?-0.95+0.12*Math.sin(liveT*13):-0.55;
+  n.armR.rotation.x=-0.55; n.armR.rotation.z=0;
+  n.head.rotation.x=busy?0.15+0.05*Math.sin(liveT*2.7):0; n.head.rotation.y=0;
+  n.g.rotation.y=0;
+}
+function liveFrame(dt){
+  let doorDist=99;
+  for(const E of pool){
+    const S=E.L;
+    if(!S){ if(E.g.visible||E.marker.visible||E.sprite.visible) hideEntry(E); continue; }
+    stepAvatar(E,S,dt);
+    if(!E.L) continue;
+    poseAvatar(E,S,dt);
+    if(S.lie<0.01) doorDist=Math.min(doorDist,Math.hypot(S.x+16,S.z-5));
+  }
+  const open=1-smoothstep(1.4,3.4,doorDist);
+  doorL.position.z=4.2-1.5*open; doorR.position.z=5.8+1.5*open;
+  doctorLive(dt); nurseLive();
+}
+
+/* ---- จัดช่อง: คนเดิมอยู่ที่เดิม · คนใหม่ได้ช่องว่าง · เตียง/จุดคัดกรองว่าง → ย้ายคนที่ควรได้ก่อนจากเก้าอี้ขึ้นไป ---- */
+const zoneOf=p=>p.stage==='wtri'?'wait':'z'+(p.lv>=0?p.lv:4);
+const lyingFirst=p=>p.stage==='wtri'||p.stage==='wdoc'?1:0;
+function assignSlots(list){
+  const want=new Map(), used=new Set(), cur=new Map(), groups=new Map();
+  for(const E of pool){ const S=E.L; if(S&&!S.leaving&&!S.fadeOut&&S.target) cur.set(S.vn,S.target); }
+  for(const p of list){ const z=zoneOf(p); if(!groups.has(z)) groups.set(z,[]); groups.get(z).push(p); }
+  for(const [z,ps] of groups){
+    const Z=ZONES[z], all=[...Z.prime,...Z.extra];
+    ps.sort((a,b)=>lyingFirst(a)-lyingFirst(b)||(a.ent||0)-(b.ent||0));
+    for(const p of ps){ const s=cur.get(p.vn); if(s&&s.zone===z&&!used.has(s)){ want.set(p.vn,s); used.add(s); } }
+    for(const p of ps){ if(want.has(p.vn)) continue; const s=all.find(s=>!used.has(s)); if(s){ want.set(p.vn,s); used.add(s); } }
+    for(const s of Z.prime){
+      if(used.has(s)) continue;
+      const c=ps.find(p=>{ const w=want.get(p.vn); return w&&!Z.prime.includes(w); });
+      if(c){ used.delete(want.get(c.vn)); want.set(c.vn,s); used.add(s); }
+    }
+  }
+  return want;
+}
+function applyLive(list){
+  DB.byVn=new Map(list.map(p=>[p.vn,p]));
+  const want=assignSlots(list);
+  for(const E of pool){
+    const S=E.L; if(!S||S.leaving||S.fadeOut) continue;
+    if(!DB.byVn.has(S.vn)){ S.leaving=true; goSlot(E,DOOR_SLOT); }       // ออกจาก ER → เดินออกทางประตู
+    else if(!want.has(S.vn)) S.fadeOut=true;                              // ช่องเต็ม → ไม่แสดงในฉาก (ยังอยู่ในรายการ)
+  }
+  let over=0, nNew=0;
+  for(const p of list){
+    const slot=want.get(p.vn)||null; p.slot=slot;
+    if(!slot){ over++; continue; }
+    let E=avatarOf(p.vn);
+    if(!E){
+      E=allocAvatar(p.vn); if(!E){ p.slot=null; over++; continue; }
+      if(DB.first) goSlot(E,slot,{instant:true});
+      else {
+        const S=E.L; S.x=DOOR_OUT[0]; S.z=DOOR_OUT[1]; S.yawT=Math.PI/2; S.fade=0; S.wait=1.6*nNew++;
+        goSlot(E,slot,{viaTri:slot.zone!=='wait'&&triFree(E)});
+      }
+    } else if(E.L.target!==slot){
+      const was=E.L.target, fromWait=!!was&&was.zone==='wait';
+      goSlot(E,slot,{viaTri:fromWait&&slot.zone!=='wait'&&was!==TRI_SLOT&&triFree(E)});
+    }
+    E.L.lastP=p;
+  }
+  DB.over=over; DB.first=false;
+}
+
+/* ---- ดึงข้อมูลรอบละครั้ง ---- */
+async function liveLoad(){
+  if(DB.busy||!DB.conn) return;
+  DB.busy=true; setDot('busy');
+  const now=new Date(), day=ymd(now), yday=ymd(new Date(now.getFullYear(),now.getMonth(),now.getDate()-1));
+  try{
+    let all=[], cur=null;
+    for(let g=0;g<20;g++){
+      const page=await mustRows(erSql(yday,day,cur),'ดึงรายชื่อผู้ป่วย ER');
+      all=all.concat(page);
+      if(page.length<PAGE_SIZE) break;
+      const nx=str(val(page[page.length-1],'vn')); if(!nx||nx===cur) break; cur=nx;
+    }
+    if(!DB.conn) return;
+    const t=Date.now(), staleMs=DB.opt.staleH>0?DB.opt.staleH*3600000:0;
+    const parsed=all.map(parseRow).filter(p=>p.vn), list=[], today=[];
+    let stale=0;
+    for(const p of parsed){
+      if(p.day===day) today.push(p);
+      if(p.stage==='out') continue;
+      if(staleMs&&p.ent&&t-p.ent>staleMs){ stale++; continue; }
+      list.push(p);
+    }
+    const det=await loadDetail(list.map(p=>p.vn));
+    for(const p of list){
+      p.det=det.get(p.vn)||DB.det.get(p.vn)||null;
+      const ln=DB.lsName.get(p.ls)||'';
+      p.active=p.stage==='tx'&&(/กำลังตรวจ/.test(ln)||(!!p.doc&&t-p.doc<30*60000));
+    }
+    DB.det=new Map(list.filter(p=>p.det).map(p=>[p.vn,p.det]));
+    list.sort(listOrder);
+    DB.pts=list; DB.today=today; DB.rowsAll=parsed; DB.staleN=stale; DB.at=t; DB.err='';
+    DB.active=list.filter(p=>p.active).map(p=>p.vn);
+    DB.emsAt=Math.max(0,...parsed.filter(isEms).map(p=>p.ent||0));
+    applyLive(list);
+  }catch(e){ DB.err=e.message||String(e); console.warn(e); }
+  finally{
+    DB.busy=false; DB.nextAt=performance.now()+DB.opt.every*1000;
+    setDot(!DB.conn?'off':DB.err?'off':'on');
+    renderLive(); hudText();
+  }
+}
+
+/* ---- หน้าจอ ---- */
+const HINT_SIM=$('hint').textContent;
+const LG_DEF=[0,1,2,3,4].map(i=>$('lg'+i).textContent);
+function setDot(s){ $('liveDot').className=s; }
+function who(p,i){ return DB.opt.hide?`ผู้ป่วย ${i!=null?'#'+(i+1):''}`.trim():`HN ${p.hn}`; }
+function renderStats(){
+  const c={wtri:0,wdoc:0,tx:0,obs:0,admit:0}, per=[0,0,0,0,0], now=Date.now();
+  let lateTri=0, lateDoc=0;
+  for(const p of DB.pts){ c[p.stage]++; if(p.lv>=0) per[p.lv]++; const o=overMin(p,now); if(o!=null&&o>0){ if(p.stage==='wtri') lateTri++; else lateDoc++; } }
+  const set=(id,n,warn)=>{ const el=$(id); el.querySelector('b').textContent=n; el.classList.toggle('warn',!!warn); };
+  set('sTri',c.wtri,lateTri); set('sDoc',c.wdoc,lateDoc); set('sTx',c.tx+c.obs); set('sAdm',c.admit);
+  per.forEach((n,i)=>{ $('lc'+i).textContent=n?String(n):''; });
+}
+function renderKpi(){
+  const T=DB.today, d2t=[], d2d=[], los=[];
+  for(const p of T){
+    if(p.ent&&p.tri){ const m=(p.tri-p.ent)/60000; if(m>=0&&m<=600) d2t.push(m); }
+    if(p.ent&&p.doc){ const m=(p.doc-p.ent)/60000; if(m>=0&&m<=720) d2d.push(m); }
+    if(p.ent&&p.leftAt){ const m=(p.leftAt-p.ent)/60000; if(m>=0&&m<=2880) los.push(m); }
+  }
+  const left=T.filter(p=>p.stage==='out').length, mt=median(d2t), md=median(d2d), ml=median(los);
+  const bits=[`วันนี้ ${T.length} ราย · ออกจาก ER แล้ว ${left}`];
+  if(md!=null) bits.push(`มาถึง→พบแพทย์ ${durTxt(md)}`);
+  if(mt!=null) bits.push(`มาถึง→คัดกรอง ${durTxt(mt)}`);
+  if(ml!=null) bits.push(`อยู่ใน ER ${durTxt(ml)}`);
+  let s=bits.join(' · ')+(md!=null||mt!=null||ml!=null?' (ค่ากลาง)':'');
+  if(DB.staleN) s+=`<br>ไม่นับ ${DB.staleN} รายที่อยู่เกิน ${DB.opt.staleH} ชม. โดยไม่มีเวลาออก (ปรับได้ในตั้งค่า)`;
+  if(DB.over) s+=`<br>${DB.over} คนไม่มีที่ว่างในฉาก — ดูในรายการ`;
+  $('kpi').innerHTML=s;
+}
+function renderList(){
+  const now=Date.now(), box=$('ptList');
+  if(!DB.pts.length){ box.innerHTML=`<div class="ptEmpty">${DB.at?'ตอนนี้ไม่มีผู้ป่วยในห้องฉุกเฉิน':'กำลังดึงข้อมูล…'}</div>`; return; }
+  const top=box.scrollTop;
+  box.innerHTML=DB.pts.map((p,i)=>{
+    const col=p.lv>=0?TRI[p.lv].hex:'#b8c4cc', o=overMin(p,now), warn=o!=null&&o>0;
+    const cc=!DB.opt.hide&&p.det&&p.det.cc?' · '+esc(p.det.cc):'';
+    const st=esc(stageText(p))+(warn?` · เกินเป้า ${Math.round(o)} นาที`:'');
+    return `<button class="pt${p.vn===DB.selVn?' on':''}" data-vn="${esc(p.vn)}"><span class="dot" style="background:${col}"></span>`
+      +`<span class="nm">${esc(who(p,i))}${cc}<span class="st">${st}</span></span>`
+      +`<span class="tm${warn?' warn':''}" title="อยู่ใน ER มา">${p.ent?hmTag((now-p.ent)/60000):'–'}</span></button>`;
+  }).join('');
+  box.scrollTop=top;
+}
+function renderFeed(){
+  const ev=[], idx=new Map(DB.pts.map((p,i)=>[p.vn,i]));
+  for(const p of DB.rowsAll){
+    const w=DB.opt.hide?'ผู้ป่วย':esc(who(p));
+    if(p.ent) ev.push({t:p.ent,c:'#9aa9b6',h:`${w} มาถึง ER${isEms(p)?' · มาด้วยรถ EMS':''}`});
+    if(p.tri&&p.lv>=0) ev.push({t:p.tri,c:TRI[p.lv].hex,h:`${w} คัดกรองได้ <b>สี${TRI[p.lv].name}</b>`});
+    if(p.doc) ev.push({t:p.doc,c:'#0f6e8c',h:`แพทย์เริ่มตรวจ ${w}`});
+    if(p.left&&p.leftAt) ev.push({t:p.leftAt,c:'#7b8a96',h:`${w} ออกจาก ER · ${esc(leaveName(p)||'จำหน่าย')}`});
+  }
+  ev.sort((a,b)=>a.t-b.t);
+  const items=ev.slice(-5), sig=items.map(e=>e.t+e.h).join('|');
+  if(sig===DB.feedSig) return;
+  const grew=!!DB.feedSig; DB.feedSig=sig;
+  feedList.innerHTML=items.length
+    ?items.map((e,i)=>`<div class="ev${grew&&i===items.length-1?' new':''}"><span class="dot" style="background:${e.c}"></span><span><span class="muted">${hhmm(e.t)}</span> ${e.h}</span></div>`).join('')
+    :'<div class="ev muted">ยังไม่มีผู้ป่วย ER วันนี้</div>';
+}
+function renderInfoLive(){
+  const vn=DB.selVn; if(!vn) return;
+  const p=DB.byVn.get(vn), box=$('infoLive');
+  if(!p){ $('iTitle').textContent='ผู้ป่วย'; box.innerHTML='<div class="kv"><span>สถานะ</span><b>ออกจาก ER แล้ว</b></div>'; return; }
+  const H=DB.opt.hide, now=Date.now(), d=p.det||{}, i=DB.pts.indexOf(p);
+  const kv=(k,v)=>v?`<div class="kv"><span>${k}</span><b>${v}</b></div>`:'';
+  const lvTxt=p.lv>=0?`<span class="dot" style="background:${TRI[p.lv].hex}"></span><span>สี${TRI[p.lv].name} · ${esc(DB.lvName.get(p.lid)||TRI[p.lv].label)}</span>`:'<span class="muted">ยังไม่คัดกรอง</span>';
+  const age=ageOf(d.bday,now), sex=d.sx==='1'?'ชาย':d.sx==='2'?'หญิง':'';
+  const vs=[d.bs&&d.bd?`BP ${d.bs}/${d.bd}`:'', d.pr?`PR ${d.pr}`:'', d.rr?`RR ${d.rr}`:'', d.tp?`T ${d.tp}`:'', d.o2?`SpO₂ ${d.o2}%`:''].filter(Boolean).join(' · ');
+  const at=ms=>ms?`${hhmm(ms)}${p.ent&&ms>=p.ent?` <span class="muted">(+${durTxt((ms-p.ent)/60000)})</span>`:''}`:'';
+  const o=overMin(p,now);
+  $('iTitle').textContent=who(p,i);
+  box.innerHTML=kv('ระดับคัดกรอง',lvTxt)
+    +kv('สถานะ',esc(stageText(p))+(o!=null&&o>0?` <span style="color:#c2410c">· เกินเป้า ${Math.round(o)} นาที</span>`:''))
+    +(H?'':kv('อาการสำคัญ',esc(d.cc)))
+    +kv('เพศ / อายุ',[sex,age!=null?age+' ปี':''].filter(Boolean).join(' · '))
+    +kv('มาถึง ER',p.ent?`${hhmm(p.ent)} <span class="muted">(อยู่มา ${durTxt((now-p.ent)/60000)})</span>`:'')
+    +kv('คัดกรอง',at(p.tri))+kv('แพทย์ตรวจ',at(p.doc))
+    +kv('สัญญาณชีพ',esc(vs))+kv('NEWS2',esc(p.nw))
+    +kv('มาโดย',esc([DB.istName.get(p.ist)||'',DB.ptName.get(p.pt)||''].filter(Boolean).join(' · ')))
+    +(H?'':kv('AN',esc(p.an)))
+    +kv('ในฉาก',esc(p.slot?p.slot.name:'ไม่มีที่ว่างในฉาก'));
+}
+function renderLive(){
+  if(MODE!=='live') return;
+  const n=DB.pts.length;
+  $('summary').textContent=`${DB.hosp||DB.db} · อยู่ใน ER ตอนนี้ ${n} คน`;
+  const er=$('liveErr'); er.textContent=DB.err; er.classList.toggle('hidden',!DB.err);
+  renderStats(); renderKpi(); renderList(); renderFeed();
+  if(DB.selVn) renderInfoLive();
+}
+let hudT=0;
+function hudText(){
+  const left=Math.max(0,Math.ceil((DB.nextAt-performance.now())/1000));
+  $('liveTxt').textContent=!DB.conn?'ไม่ได้เชื่อมต่อ':DB.busy?'กำลังดึงข้อมูล…'
+    :`${DB.db} · อัปเดต ${DB.at?new Date(DB.at).toLocaleTimeString('th-TH',{hour12:false}):'–'} · อีก ${left} วินาที`;
+}
+function liveHud(dt){
+  hudT+=dt; if(hudT<0.5) return; hudT=0; DB.tick++;
+  if(DB.conn&&!DB.busy&&performance.now()>=DB.nextAt) liveLoad();
+  hudText();
+  if(DB.tick%20===0){ renderStats(); renderList(); }
+  if(DB.selVn&&DB.tick%2===0) renderInfoLive();
+}
+function liveSelect(vn){
+  DB.selVn=vn; $('info').classList.remove('hidden');
+  renderInfoLive(); renderList();
+}
+
+/* ---- เข้า/ออกโหมดข้อมูลจริง ---- */
+function enterLive(){
+  MODE='live'; DB.first=true; DB.nextAt=0; DB.feedSig=''; DB.pts=[]; DB.byVn=new Map(); DB.rowsAll=[]; DB.today=[];
+  loadOpt();
+  for(const E of pool){ E.L=null; hideEntry(E); E.wasHidden=true; }
+  selected=-1; DB.selVn=''; $('info').classList.add('hidden'); selRing.visible=false;
+  Object.assign(DOC,{path:null,s:0,x:HOME.x,z:HOME.z,yawT:Math.PI,walk:false,exam:'',goVn:'',t:0,idx:0,spot:null});
+  zoneChairs.visible=true;
+  $('simBox').classList.add('hidden'); $('liveBox').classList.remove('hidden');
+  $('infoSim').classList.add('hidden'); $('infoLive').classList.remove('hidden');
+  $('prompt').classList.add('hidden');
+  $('title').textContent='ห้องฉุกเฉิน 3 มิติ · ข้อมูลจริง';
+  $('hint').textContent='ลากเพื่อหมุนกล้อง • ล้อเมาส์/จีบนิ้วเพื่อซูม • คลิกผู้ป่วยหรือรายชื่อเพื่อดูรายละเอียด';
+  $('lgTitle').textContent='ระดับคัดกรอง · ใน ER ตอนนี้';
+  for(let i=0;i<5;i++){
+    let nm=''; for(const [c,n] of DB.lvName) if(lvIndex(c)===i){ nm=n; break; }
+    $('lg'+i).textContent=`${TRI[i].name} · ${nm||TRI[i].label}`;
+  }
+  setDot('busy'); $('liveTxt').textContent='กำลังดึงข้อมูล…';
+  renderLive();
+}
+function enterSim(){
+  MODE='sim';
+  for(const E of pool){ E.L=null; hideEntry(E); E.wasHidden=true; }
+  zoneChairs.visible=false; DB.selVn=''; deselect();
+  $('simBox').classList.remove('hidden'); $('liveBox').classList.add('hidden');
+  $('infoSim').classList.remove('hidden'); $('infoLive').classList.add('hidden');
+  $('title').textContent='แบบจำลองห้องฉุกเฉิน 3 มิติ'; $('hint').textContent=HINT_SIM;
+  $('lgTitle').textContent='ระดับความเร่งด่วน';
+  LG_DEF.forEach((t,i)=>{ $('lg'+i).textContent=t; $('lc'+i).textContent=''; });
+  rebuild();
+}
+function showConn(msg,bad){
+  $('connMsg').textContent=msg||'วาง BMS Session ID ที่ขอจาก HOSxP (เมนู BMS Session) เพื่อแสดงผู้ป่วยในห้องฉุกเฉินตอนนี้จากตาราง er_regist — หรือกด “ดูแบบจำลอง”';
+  $('connMsg').className=bad?'bad':'';
+  $('conn').classList.remove('hidden');
+  setTimeout(()=>{ try{ $('sidIn').focus(); }catch(e){} },60);
+}
+function hideConn(){ $('conn').classList.add('hidden'); $('sidIn').value=''; }
+async function connect(sid){
+  const prev=$('summary').textContent;
+  $('summary').textContent='กำลังเชื่อมต่อ HOSxP…';
+  const fail=(m)=>{ $('summary').textContent=MODE==='live'?'เชื่อมต่อไม่สำเร็จ':prev; if(MODE==='live') setDot('off'); showConn(m,true); };
+  const data=await fetchJson(proxied(`${PASTEJSON_URL}?Action=GET&code=${encodeURIComponent(sid)}`));
+  if(data.MessageCode!==200){
+    fail(data.network?explain(data):data.nonJson?`hosxp.net ตอบกลับผิดรูปแบบ (HTTP ${data.MessageCode})`:`Session ใช้ไม่ได้: ${data.Message||data.MessageCode}`);
+    return;
+  }
+  const c=extractConn(data);
+  if(!c.apiUrl||!c.authKey){ fail('Session ถูกต้องแต่ไม่มี api_url / auth key สำหรับ /api/sql'); return; }
+  DB.conn={apiUrl:c.apiUrl,authKey:c.authKey}; DB.user=c.user||{};
+  const v=await sql('SELECT version() AS v');
+  if(!ok(v)){ DB.conn=null; fail('เชื่อมต่อฐานข้อมูลไม่ได้: '+explain(v)); return; }
+  lsSet(LS_SID,sid);
+  const ver=str(v.data[0]&&val(v.data[0],'v'));
+  DB.pg=ver?/postgre/i.test(ver):/postgre/i.test(str(DB.user.bms_database_type));
+  DB.engine=(DB.pg?'PostgreSQL ':'MySQL ')+((ver.match(/\d+\.\d+/)||[''])[0]);
+  DB.db=str(DB.user.bms_database_name)||c.apiUrl.replace(/^https?:\/\//,'');
+  DB.hosp=str(DB.user.location)||DB.db;
+  await probeSchema();
+  if(!hasTable('er_regist')||!has('er_regist','vn')||!hasTable('ovst')){
+    DB.conn=null; fail('ฐานข้อมูลนี้ไม่มีตาราง er_regist (ทะเบียนห้องฉุกเฉินของ HOSxP) จึงแสดงผู้ป่วย ER ไม่ได้'); return;
+  }
+  if(has('er_regist','er_emergency_level_id')&&hasTable('er_emergency_level')){
+    DB.lvCol='e.er_emergency_level_id'; DB.lvSrc='er_emergency_level';
+    await loadMap('er_emergency_level','er_emergency_level_id','er_emergency_level_name',DB.lvName);
+  } else if(has('er_regist','er_emergency_type')){
+    DB.lvCol='e.er_emergency_type'; DB.lvSrc='er_emergency_type';
+    await loadMap('er_emergency_type','er_emergency_type','name',DB.lvName);
+  } else { DB.lvCol='NULL'; DB.lvSrc='ไม่มี'; DB.lvName.clear(); }
+  await loadMap('er_leave_status','er_leave_status_id','er_leave_status_name',DB.lsName);
+  await loadMap('er_dch_type','er_dch_type','name',DB.dchName);
+  await loadMap('er_pt_type','er_pt_type','name',DB.ptName);
+  await loadMap('ovstist','ovstist','name',DB.istName);
+  hideConn(); $('setDlg').classList.add('hidden');
+  enterLive();
+}
+function sessionLost(){
+  if(!DB.conn) return;
+  DB.conn=null; lsDel(LS_SID); setDot('off');
+  showConn('Session หมดอายุหรือถูกยกเลิก — วาง session ID ใหม่เพื่อแสดงข้อมูลต่อ',true);
+}
+function factsHtml(){
+  return [
+    `${esc(DB.hosp)} · ${esc(DB.db)} (${esc(DB.engine)})`,
+    `er_regist วันนี้ ${DB.today.length} แถว · ระดับคัดกรองจาก ${esc(DB.lvSrc)} (${DB.lvName.size} ระดับ)`,
+    `สถานะ ER: er_leave_status ${DB.lsName.size} แบบ · er_dch_type ${DB.dchName.size} แบบ`,
+    `อาการสำคัญ/สัญญาณชีพ: ${hasTable('opdscreen')?'opdscreen':'ไม่มีตาราง opdscreen'}`,
+  ].join('<br>');
+}
+
+/* ---- ปุ่ม ---- */
+$('connGo').addEventListener('click',()=>{
+  const s=$('sidIn').value.trim();
+  if(!/^[\w-]{16,}$/.test(s)){ showConn('รูปแบบ Session ID ไม่ถูกต้อง',true); return; }
+  hideConn(); connect(s);
+});
+$('sidIn').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); $('connGo').click(); } });
+$('connSim').addEventListener('click',()=>{ hideConn(); if(MODE==='live') enterSim(); });
+$('toLive').addEventListener('click',(e)=>{
+  blurIfMouse(e);
+  if(DB.conn){ enterLive(); return; }
+  const sid=lsGet(LS_SID)||lsGet(LS_HOME_SID);
+  if(sid) connect(sid); else showConn('',false);
+});
+$('btnSim').addEventListener('click',(e)=>{ blurIfMouse(e); enterSim(); });
+$('btnNow').addEventListener('click',(e)=>{ blurIfMouse(e); DB.nextAt=0; hudT=1; });
+$('btnView').addEventListener('click',(e)=>{ blurIfMouse(e); resetView(); });
+$('btnSet').addEventListener('click',(e)=>{
+  blurIfMouse(e);
+  $('optEvery').value=String(DB.opt.every); $('optStale').value=String(DB.opt.staleH); $('optHide').checked=!!DB.opt.hide;
+  $('setFacts').innerHTML=factsHtml();
+  $('setDlg').classList.remove('hidden');
+});
+$('setClose').addEventListener('click',()=>{
+  const ev=+$('optEvery').value; if([10,20,30,60].includes(ev)) DB.opt.every=ev;
+  const h=Math.round(+$('optStale').value); if(Number.isFinite(h)) DB.opt.staleH=clamp(h,0,72);
+  DB.opt.hide=$('optHide').checked;
+  saveOpt(); $('setDlg').classList.add('hidden');
+  DB.feedSig=''; DB.nextAt=0; hudT=1; renderLive();
+});
+$('setSid').addEventListener('click',()=>{ $('setDlg').classList.add('hidden'); showConn('วาง BMS Session ID ใหม่',false); });
+$('ptList').addEventListener('click',(e)=>{ const b=e.target.closest('[data-vn]'); if(b) liveSelect(b.dataset.vn); });
+window.addEventListener('keydown',(e)=>{
+  if(e.key!=='Escape') return;
+  if(!$('setDlg').classList.contains('hidden')) $('setDlg').classList.add('hidden');
+  else if(!$('conn').classList.contains('hidden')) $('conn').classList.add('hidden');
+});
+
+/* ---------------- start ---------------- */
+rebuild();
+if(reduceMotion){ setPlaying(false); tl=L*0.45; $('prompt').classList.remove('hidden'); }
+else setPlaying(true);
+{
+  /* session จาก URL (หน้ารวมส่งมา) → ที่จำไว้ของแอปนี้ → ของหน้ารวม → ถาม · ?demo=1 = แบบจำลองอย่างเดียว */
+  const qs=new URLSearchParams(location.search);
+  DB.mkt=qs.get('marketplace-token')||qs.get('marketplace_token')||'';
+  const urlSid=qs.get(SID_PARAM)||qs.get('bms_session_id')||'';
+  if(urlSid){   // ไม่ให้ session ค้างอยู่ในแถบที่อยู่/ประวัติการเปิด
+    qs.delete(SID_PARAM); qs.delete('bms_session_id');
+    history.replaceState(null,'',location.pathname+(qs.toString()?'?'+qs:''));
+  }
+  if(qs.get('demo')!=='1'){
+    const sid=urlSid||lsGet(LS_SID)||lsGet(LS_HOME_SID);
+    if(sid) connect(sid); else showConn('',false);
+  }
+  /* ?debug=1 → เดินฉากทีละเฟรมจากคอนโซลได้ (ใช้ตรวจตอนแท็บถูกซ่อนแล้วภาพไม่วาด) */
+  if(qs.get('debug')==='1') window.__er3d={   // ไม่เปิด DB ออกไป เพราะมี auth key ของ session อยู่ข้างใน
+    step(sec=1,dt=1/30){ for(let t=0;t<sec;t+=dt){ liveT+=dt; liveFrame(dt); } for(let i=0;i<12;i++) updateCamera(0.5); renderer.render(scene,camera); },
+    who(){ return pool.filter(E=>E.L).map(E=>({vn:E.L.vn.slice(-4),at:[+E.L.x.toFixed(2),+E.L.z.toFixed(2)],
+      slot:E.L.slot&&E.L.slot.name,target:E.L.target&&E.L.target.name,walking:!!E.L.path,lie:+E.L.lie.toFixed(2),sit:+E.L.sit.toFixed(2),
+      leaving:E.L.leaving,vis:E.g.visible})); },
+    doc(){ return {at:[+DOC.x.toFixed(2),+DOC.z.toFixed(2)],exam:DOC.exam.slice(-4),walking:!!DOC.path,active:DB.active.map(v=>v.slice(-4))}; }};
+}
+
+/* รอบดึงข้อมูล/นับถอยหลังใช้ตัวจับเวลาแยกจากการวาดภาพ: แท็บที่ถูกซ่อนจะหยุดวาด (requestAnimationFrame)
+   แต่ข้อมูลยังต้องสดอยู่ พอกลับมาเห็นจอ ฉากก็ตรงกับข้อมูลล่าสุดทันที */
+setInterval(()=>{ if(MODE==='live') liveHud(0.5); },500);
+
+const clockT=new THREE.Clock();
+renderer.setAnimationLoop(()=>{
+  const dt=Math.min(clockT.getDelta(),0.05);
+  const live=MODE==='live';
+  if(live){ liveT+=dt; liveFrame(dt); }
+  else {
+    if(playing){ tl+=dt*speed; if(tl>=L){ tl-=L; feedCount=-1; } }
+    updatePatients(tl,dt);
+    updateNurse(tl);
+    updateDoctor(tl,dt);
+  }
+  const ta=live?liveT:tl;
+  ecgTex.offset.x=ta*0.45;
+  M.screen.emissiveIntensity=0.5+0.12*Math.sin(ta*3);
+  if(live){
+    /* ไฟไซเรนรถพยาบาลกระพริบ 15 นาทีหลังมีคนไข้มากับรถ EMS · นาฬิกาผนังเป็นเวลาจริง */
+    const ems=DB.emsAt&&Date.now()-DB.emsAt<15*60000, flash=ems&&Math.sin(liveT*12)>0;
+    M.lightR.emissiveIntensity=ems?(flash?2.2:0.15):0.08; M.lightB.emissiveIntensity=ems?(flash?0.15:2.2):0.08;
+    const n=new Date(), mins=n.getHours()*60+n.getMinutes()+n.getSeconds()/60;
+    minHand.rotation.z=-((mins%60)/60)*Math.PI*2;
+    hourHand.rotation.z=-((mins%720)/720)*Math.PI*2;
+    selected=DB.selVn?pool.findIndex(E=>E.L&&E.L.vn===DB.selVn&&!E.L.leaving):-1;
+  } else {
+    const flash=Math.sin(tl*12)>0;
+    M.lightR.emissiveIntensity=flash?2.2:0.15; M.lightB.emissiveIntensity=flash?0.15:2.2;
+    minHand.rotation.z=-(tl/60)*Math.PI*2;
+    hourHand.rotation.z=-((8*60+tl)/720)*Math.PI*2;
+  }
+
+  if(selected>=0&&pool[selected]&&pool[selected].g.visible){
+    pool[selected].torso.getWorldPosition(tmpV);
+    selRing.visible=true; selRing.position.set(tmpV.x,0.035,tmpV.z);
+    selRing.scale.setScalar(1+0.08*Math.sin(performance.now()*0.006));
+  } else selRing.visible=false;
+
+  if(!live){
+    updateHUD(tl);
+    infoTimer+=dt; if(infoTimer>0.16){ infoTimer=0; updateInfo(tl); }
+  }
+  updateCamera(dt);
+  renderer.render(scene,camera);
+});
+}
+</script>
+<script>
+/* ลิงก์กลับหน้ารวมแอปแสดงผล 3 มิติ — หน้านี้ถูกเสิร์ฟจากเซิร์ฟเวอร์ตัวเดียวกับหน้ารวม
+   (start.bat ของ BMS-3D-Home) หน้ารวมจึงอยู่ที่ /index.html ของพอร์ตเดียวกันเสมอ
+   แม้จะเปลี่ยน PORT ใน start.bat · โผล่เฉพาะตอนที่หน้ารวมมีอยู่จริง จะได้ไม่มีลิงก์ตายค้างบนจอ */
+(function(){
+  var a=document.getElementById('homeLnk');
+  if(!a) return;
+  var url=location.protocol==='file:'?'http://localhost:8805/index.html':location.origin+'/index.html';
+  if(url===location.origin+location.pathname) return;
+  a.href=url;
+  try{
+    var c=new AbortController(), t=setTimeout(function(){ c.abort(); },2500);
+    fetch(url,{method:'HEAD',mode:'no-cors',cache:'no-store',signal:c.signal})
+      .then(function(r){ if(!r||r.type==='opaque'||r.status<400) a.hidden=false; })
+      .catch(function(){}).then(function(){ clearTimeout(t); });
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
